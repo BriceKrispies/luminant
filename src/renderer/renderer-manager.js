@@ -61,10 +61,29 @@ export function savePreference(id) {
  */
 export function createRendererManager(canvas, options = {}) {
   let active = null;       // current RendererBackend
+  let currentCanvas = canvas;
   let webgpuAvailable = false;
   const { onSwitch, onError } = options;
 
+  /**
+   * Replace the canvas element to allow switching context types.
+   * A canvas can only have one context type (2d or webgpu) for its lifetime.
+   */
+  function replaceCanvas() {
+    const newCanvas = document.createElement('canvas');
+    newCanvas.id = currentCanvas.id;
+    newCanvas.className = currentCanvas.className;
+    newCanvas.style.cssText = currentCanvas.style.cssText;
+    newCanvas.width = currentCanvas.width;
+    newCanvas.height = currentCanvas.height;
+    currentCanvas.parentElement.replaceChild(newCanvas, currentCanvas);
+    currentCanvas = newCanvas;
+  }
+
   return {
+    /** The current canvas element (may change on renderer switch) */
+    get canvas() { return currentCanvas; },
+
     /** True if WebGPU is available on this device */
     get webgpuAvailable() { return webgpuAvailable; },
 
@@ -129,7 +148,8 @@ export function createRendererManager(canvas, options = {}) {
         return false;
       }
 
-      console.log(`[renderer] Switching from ${active?.id || 'none'} to ${id}`);
+      const prevId = active?.id || 'none';
+      console.log(`[renderer] Switching from ${prevId} to ${id}`);
 
       // Dispose old
       if (active) {
@@ -141,6 +161,9 @@ export function createRendererManager(canvas, options = {}) {
         }
         active = null;
       }
+
+      // Replace canvas element — a canvas can only have one context type
+      replaceCanvas();
 
       // Start new
       const success = await this._startRenderer(id);
@@ -180,8 +203,8 @@ export function createRendererManager(canvas, options = {}) {
     /** @private Start a renderer by ID, with fallback to canvas */
     async _startRenderer(id) {
       const renderer = id === 'webgpu'
-        ? createWebGPURenderer(canvas)
-        : createCanvasRenderer(canvas);
+        ? createWebGPURenderer(currentCanvas)
+        : createCanvasRenderer(currentCanvas);
 
       try {
         validateRenderer(renderer);

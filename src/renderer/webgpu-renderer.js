@@ -501,8 +501,11 @@ export function createWebGPURenderer(canvas) {
       fogPipeline = null;
       groundPipeline = null;
       uniformBindGroup = null;
-      // Reset canvas to release WebGPU context
-      canvas.width = canvas.width; // eslint-disable-line no-self-assign
+      // Unconfigure WebGPU context so the canvas can be reused with a different context type
+      if (context) {
+        context.unconfigure();
+        context = null;
+      }
     },
 
     get width() { return canvas.width; },

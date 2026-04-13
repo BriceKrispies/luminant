@@ -419,9 +419,10 @@ async function main() {
   // ── Resize ──
   window.addEventListener('resize', () => {
     rendererManager.resize();
+    const c = rendererManager.canvas;
     camera.resize(
-      canvas.getBoundingClientRect().width,
-      canvas.getBoundingClientRect().height
+      c.getBoundingClientRect().width,
+      c.getBoundingClientRect().height
     );
   });
 
