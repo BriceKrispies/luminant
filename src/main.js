@@ -45,9 +45,30 @@ const WORLD_H = 4096;
 async function main() {
   // ── Register service worker for PWA / offline ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(
-      (import.meta.env?.BASE_URL || '/') + 'sw.js'
-    ).catch(() => {});
+    const swUrl = (import.meta.env?.BASE_URL || '/') + 'sw.js';
+    navigator.serviceWorker.register(swUrl).then((reg) => {
+      // Check for updates every 60s (catches deploys while tab is open)
+      setInterval(() => reg.update().catch(() => {}), 60_000);
+
+      // When a new SW is waiting, activate it and reload
+      function onNewSW(sw) {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version ready — reload to pick it up.
+          // skipWaiting() in the SW triggers controllerchange below.
+          sw.postMessage({ type: 'SKIP_WAITING' });
+        }
+      }
+      if (reg.waiting) onNewSW(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const next = reg.installing;
+        if (next) next.addEventListener('statechange', () => onNewSW(next));
+      });
+    }).catch(() => {});
+
+    // Reload when a new SW takes control (seamless update)
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
   }
 
   // ── Step 1: Load core resources ──
