@@ -1,0 +1,25 @@
+{
+  "name": "luminant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build-wat.js && vite",
+    "build": "node scripts/build-wat.js && vite build",
+    "preview": "vite preview",
+    "build:wat": "node scripts/build-wat.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "benchmark": "node scripts/build-wat.js && node harness/benchmark.js",
+    "headless": "node scripts/build-wat.js && node harness/headless.js",
+    "sim": "node scripts/build-wat.js && node harness/batch-sim.js --runs=1",
+    "batch": "node scripts/build-wat.js && node harness/batch-sim.js",
+    "evolve": "node scripts/build-wat.js && node harness/evolve.js",
+    "debug": "node scripts/build-wat.js && vite --open /debug/"
+  },
+  "devDependencies": {
+    "vite": "^6.3.2",
+    "vitest": "^3.1.1",
+    "wabt": "^1.0.36"
+  }
+}

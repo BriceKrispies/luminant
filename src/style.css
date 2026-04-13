@@ -1,0 +1,427 @@
+/* ── Reset ── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #ccc;
+  touch-action: none;       /* prevent pinch-zoom, scroll, etc. */
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+/* ── App shell ── */
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100dvh; /* dynamic viewport height for mobile */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#game-layer {
+  position: absolute;
+  inset: 0;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+#overlay-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#menu-layer {
+  z-index: 50;
+}
+
+/* ── Generic overlay ── */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+  pointer-events: all;
+  z-index: 10;
+}
+
+.hidden { display: none !important; }
+
+/* ── Main menu ── */
+.menu-content {
+  text-align: center;
+  padding: 2rem;
+  animation: menu-fade-in 0.4s ease-out;
+}
+
+@keyframes menu-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.menu-title {
+  font-size: clamp(2rem, 8vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #fff;
+  text-shadow: 0 0 40px rgba(100, 180, 255, 0.6), 0 0 80px rgba(100, 180, 255, 0.3);
+  margin-bottom: 0.5rem;
+}
+
+.menu-subtitle {
+  font-size: clamp(0.8rem, 2.5vw, 1.2rem);
+  color: #8af;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.menu-auto-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.policy-select {
+  background: rgba(200, 140, 40, 0.15);
+  border: 1px solid rgba(255, 200, 80, 0.3);
+  border-radius: 4px;
+  color: #ffd080;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 4px 12px;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: all;
+}
+.policy-select:focus {
+  outline: none;
+  border-color: rgba(255, 200, 80, 0.6);
+}
+.policy-select option {
+  background: #1a1a2e;
+  color: #ffd080;
+}
+
+.menu-hint {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: #668;
+  line-height: 1.6;
+}
+
+/* ── Buttons ── */
+.glow-btn {
+  min-height: 48px;
+  padding: 0.8rem 3rem;
+  font-size: clamp(1rem, 3vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #fff;
+  background: rgba(60, 120, 200, 0.3);
+  border: 2px solid rgba(100, 180, 255, 0.5);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 260px;
+  max-width: 80vw;
+}
+.glow-btn:hover, .glow-btn:active {
+  background: rgba(60, 120, 200, 0.5);
+  border-color: rgba(100, 180, 255, 0.8);
+  box-shadow: 0 0 20px rgba(100, 180, 255, 0.4);
+}
+
+.menu-btn--auto {
+  background: rgba(200, 140, 40, 0.2);
+  border-color: rgba(255, 200, 80, 0.4);
+}
+.menu-btn--auto:hover, .menu-btn--auto:active {
+  background: rgba(200, 140, 40, 0.4);
+  border-color: rgba(255, 200, 80, 0.7);
+  box-shadow: 0 0 20px rgba(255, 200, 80, 0.3);
+}
+
+/* ── Auto mode badge ── */
+#auto-mode-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #ffd080;
+  background: rgba(200, 140, 40, 0.25);
+  border: 1px solid rgba(255, 200, 80, 0.4);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 15;
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 0.8; }
+  50%      { opacity: 1; }
+}
+
+/* ── HUD ── */
+#hud {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hud-bar {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+.hud-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.15s;
+}
+
+.hp-bar { flex: 0 0 200px; }
+.hp-bar .hud-bar-fill { background: linear-gradient(90deg, #e44, #f66); }
+
+.xp-bar { flex: 1; max-width: 400px; }
+.xp-bar .hud-bar-fill { background: linear-gradient(90deg, #4af, #6cf); }
+
+.hud-level {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(100, 180, 255, 0.5);
+}
+
+.hud-kills, .hud-wave, .hud-timer {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+/* ── Level up screen ── */
+#level-up-screen {
+  background: rgba(0, 0, 0, 0.92);
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.level-up-title {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+  letter-spacing: 0.1em;
+}
+
+.upgrade-options {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 900px;
+  padding: 0 1rem;
+}
+
+.upgrade-card {
+  width: 200px;
+  min-height: 48px;
+  padding: 1.5rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.upgrade-card:hover, .upgrade-card:active {
+  background: rgba(100, 180, 255, 0.1);
+  border-color: rgba(100, 180, 255, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 4px 20px rgba(100, 180, 255, 0.2);
+}
+
+.upgrade-card h3 {
+  color: #fff;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+.upgrade-card p {
+  color: #89a;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+/* ── Game over ── */
+#game-over-screen {
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.game-over-title {
+  font-size: clamp(1.8rem, 6vw, 3rem);
+  font-weight: 900;
+  color: #e44;
+  text-shadow: 0 0 30px rgba(200, 40, 40, 0.5);
+}
+
+.game-over-stats {
+  font-size: 1rem;
+  color: #aaa;
+  line-height: 2;
+}
+
+/* ── Touch controls ── */
+#touch-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.touch-stick-area {
+  position: absolute;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  width: 140px;
+  height: 140px;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-stick-ring {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s;
+}
+.touch-stick-ring.active {
+  border-color: rgba(100, 180, 255, 0.5);
+}
+
+.touch-stick-knob {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.1s;
+  will-change: transform;
+}
+.touch-stick-ring.active .touch-stick-knob {
+  background: rgba(100, 180, 255, 0.5);
+}
+
+.touch-attack-btn {
+  position: absolute;
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  right: calc(32px + env(safe-area-inset-right, 0px));
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 100, 80, 0.3);
+  background: rgba(255, 100, 80, 0.1);
+  color: rgba(255, 200, 180, 0.6);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  transition: all 0.1s;
+}
+.touch-attack-btn.active {
+  background: rgba(255, 100, 80, 0.35);
+  border-color: rgba(255, 100, 80, 0.7);
+  color: #fff;
+  transform: scale(0.92);
+}
+
+/* Touch device overrides */
+@media (hover: none) and (pointer: coarse) {
+  #touch-controls.touch-enabled {
+    display: block !important;
+  }
+  /* Move HUD to top so it doesn't overlap joystick/attack button */
+  #hud {
+    bottom: auto;
+    top: 0;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* ── Debug overlay ── */
+#debug-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8f8;
+  z-index: 20;
+  pointer-events: none;
+  white-space: pre;
+  min-width: 200px;
+}
+
+/* ── Mobile adjustments ── */
+@media (max-width: 600px) {
+  .upgrade-card {
+    width: 160px;
+    padding: 1rem 0.8rem;
+  }
+  .upgrade-card h3 { font-size: 0.9rem; }
+  .upgrade-card p { font-size: 0.75rem; }
+  #hud { padding: 8px 12px; gap: 12px; }
+  .hp-bar { flex: 0 0 120px; }
+}

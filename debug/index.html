@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Luminant — Debug View</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; color: #ccc; font-family: monospace; display: flex; height: 100vh; }
+    #viz { flex: 1; background: #0a0a0e; }
+    #panel {
+      width: 320px; padding: 12px; overflow-y: auto; font-size: 12px;
+      border-left: 1px solid #333; background: #0d0d0d;
+    }
+    #panel h2 { color: #8f8; font-size: 14px; margin: 10px 0 4px; }
+    #panel pre { white-space: pre-wrap; line-height: 1.5; }
+    button { padding: 4px 12px; margin: 4px; cursor: pointer; background: #333; color: #ccc; border: 1px solid #555; }
+    button:hover { background: #555; }
+    .controls { margin-bottom: 12px; }
+    input[type=range] { width: 100%; }
+  </style>
+</head>
+<body>
+  <canvas id="viz"></canvas>
+  <div id="panel">
+    <h2>Debug Controls</h2>
+    <div class="controls">
+      <button id="btn-reset">Reset</button>
+      <button id="btn-step">Step</button>
+      <button id="btn-play">Play</button>
+      <button id="btn-spawn100">+100</button>
+      <button id="btn-spawn500">+500</button>
+    </div>
+    <div>
+      <label>Speed: <input id="speed" type="range" min="0" max="5" step="0.1" value="1"></label>
+    </div>
+    <h2>Simulation</h2>
+    <pre id="sim-info">Loading...</pre>
+    <h2>Subsystem Timings</h2>
+    <pre id="timing-info">—</pre>
+    <h2>Entity Breakdown</h2>
+    <pre id="entity-info">—</pre>
+  </div>
+  <script type="module">
+    import { loadEngine } from '../src/engine/loader.js';
+    import { EngineBindings, TYPE, STATE, MAX_ENTITIES, ENTITY_STRIDE, FIELD } from '../src/engine/bindings.js';
+
+    const canvas = document.getElementById('viz');
+    const ctx = canvas.getContext('2d');
+    const WORLD = 4096;
+    let engine, playing = false, speed = 1;
+
+    async function init() {
+      const wasm = await loadEngine();
+      engine = new EngineBindings(wasm);
+      resetSim();
+      resize();
+      window.addEventListener('resize', resize);
+      requestAnimationFrame(loop);
+    }
+
+    function resetSim() {
+      engine.init(WORLD, WORLD);
+      const pid = engine.spawnEntity(TYPE.PLAYER, WORLD/2, WORLD/2, 9999, 180, 12, 0, 0);
+      engine.setPlayerId(pid);
+      engine.setPlayerInput(0, 0, 0);
+      spawnEnemies(100);
+    }
+
+    function spawnEnemies(n) {
+      const px = engine.getEntityX(engine.getPlayerId());
+      const py = engine.getEntityY(engine.getPlayerId());
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 300 + Math.random() * 600;
+        engine.spawnEntity(TYPE.ENEMY_BASIC,
+          px + Math.cos(a)*d, py + Math.sin(a)*d,
+          30, 60, 10, 8, 10);
+      }
+    }
+
+    function resize() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
+
+    function loop(now) {
+      requestAnimationFrame(loop);
+      if (playing) {
+        const dt = (1/60) * speed;
+        const t0 = performance.now();
+        engine.step(dt);
+        const stepMs = performance.now() - t0;
+        updateInfo(stepMs);
+      }
+      draw();
+    }
+
+    function draw() {
+      const w = canvas.width, h = canvas.height;
+      const scale = Math.min(w, h) / WORLD;
+      ctx.fillStyle = '#0a0a0e';
+      ctx.fillRect(0, 0, w, h);
+
+      const buf = engine.mem;
+      for (let id = 0; id < MAX_ENTITIES; id++) {
+        const base = id * ENTITY_STRIDE;
+        const state = buf.getInt32(base + FIELD.STATE, true);
+        if (state === 0) continue;
+        const type = buf.getInt32(base + FIELD.TYPE, true);
+        const x = buf.getFloat32(base + FIELD.X, true) * scale;
+        const y = buf.getFloat32(base + FIELD.Y, true) * scale;
+        const r = Math.max(2, buf.getFloat32(base + FIELD.RADIUS, true) * scale);
+
+        if (type === TYPE.PLAYER) ctx.fillStyle = '#ffd080';
+        else if (type >= 2 && type <= 9) ctx.fillStyle = state === 2 ? '#444' : '#4a8';
+        else if (type >= 10 && type <= 19) ctx.fillStyle = '#ff8';
+        else ctx.fillStyle = '#4af';
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function updateInfo(stepMs) {
+      const m = engine.getMetrics();
+      document.getElementById('sim-info').textContent =
+        `Active: ${m.activeEntities}\nTime: ${engine.getTime().toFixed(1)}s`;
+      document.getElementById('timing-info').textContent =
+        `Step: ${stepMs.toFixed(3)} ms`;
+      const enemies = engine.countByType(2, 9);
+      const projs = engine.countByType(10, 19);
+      const picks = engine.countByType(20, 29);
+      document.getElementById('entity-info').textContent =
+        `Enemies: ${enemies}\nProjectiles: ${projs}\nPickups: ${picks}`;
+    }
+
+    // Controls
+    document.getElementById('btn-reset').onclick = resetSim;
+    document.getElementById('btn-step').onclick = () => { engine.step(1/60); updateInfo(0); };
+    document.getElementById('btn-play').onclick = () => {
+      playing = !playing;
+      document.getElementById('btn-play').textContent = playing ? 'Pause' : 'Play';
+    };
+    document.getElementById('btn-spawn100').onclick = () => spawnEnemies(100);
+    document.getElementById('btn-spawn500').onclick = () => spawnEnemies(500);
+    document.getElementById('speed').oninput = (e) => { speed = parseFloat(e.target.value); };
+
+    init();
+  </script>
+</body>
+</html>
