@@ -1,6 +1,7 @@
 # Luminant
 
-Top-down survival-action game with WAT/WASM engine core.
+AI-driven top-down survival-action game with WAT/WASM engine core.
+The game is auto-mode only — AI policies control the player, there is no manual play.
 
 ## Architecture
 
@@ -10,6 +11,7 @@ Top-down survival-action game with WAT/WASM engine core.
 - **AI/Policy**: Policy-driven auto mode + observations + scoring (`src/ai/`)
 - **Renderer**: Dual-backend with manager (`src/renderer/`) — WebGPU default, Canvas 2D fallback
 - **Content**: Data definitions (`src/content/`)
+- **UI**: Menu (policy selector), HUD, level-up, game-over (`src/ui/`)
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
 
 Engine owns entity data. Renderer reads snapshots. JS handles game rules.
@@ -32,6 +34,14 @@ JS reads entity data directly from `memory.buffer` using typed array views.
 Entity stride = 64 bytes. Field offsets defined in `src/engine/bindings.js`.
 Entity types: 1=player, 2-9=enemies, 10-19=projectiles, 20+=pickups.
 Entity states: 0=free, 1=active, 2=dying.
+
+## Renderer
+
+Dual-backend system with runtime switching:
+- **WebGPU** (`webgpu-renderer.js`): Instanced entity rendering, WGSL shaders, orthographic projection. Effects (slash, hit, death) drawn via Canvas 2D overlay.
+- **Canvas 2D** (`canvas-renderer.js`): Layered drawing (ground, lights, entities, effects, fog, HUD).
+- **Manager** (`renderer-manager.js`): Detects WebGPU, loads/saves preference to localStorage, handles runtime toggle (F4 / badge click). Replaces the canvas element on context switch since a canvas can only have one context type.
+- **Interface** (`renderer-interface.js`): Contract — `{ id, name, init(), resize(), render(), dispose() }`.
 
 ## Commands
 
@@ -57,20 +67,29 @@ npm run build:wat    # Compile engine/core.wat → public/core.wasm
 6. Entity types 2-9 steer toward player in WAT
 7. Entity types 10-19 move by velocity and expire by lifetime in WAT
 8. Deaths: WAT sets state=2, JS processes dying entities (XP, pickups)
+9. A canvas element can only have one context type — renderer manager replaces it on switch
 
 ## AI / Policy System
 
+- **Auto-mode only** — AI policies control the player, no manual play mode
 - **Policies** produce actions (dx, dy, attack, target) from observations each tick
-- **Observations** are built from engine state, never raw WASM memory
+- **Observations** built from engine state: spatial sectors, threat density, safest escape vector (`safestDirX/Y`), weapon readiness (`weaponReady`, `weaponRange`, `enemiesInArc`)
+- **Intelligent attacks** — policies only swing when enemies are in range and weapon is ready, not always-attack
 - **Upgrade strategies** are separate from movement policies
 - **Scoring** is centralized in `src/ai/scoring.js`
 - **Evolution** tunes policy parameters via `src/ai/evolution.js`
 - Built-in policies: `survival` (kiting/safety), `progression` (XP farming)
-- Policy input flows through the same `setPlayerInput()` path as manual play
+- Policy input flows through `input.setOverride()` → same `setPlayerInput()` path
 
 | Layer | Reads | Writes | Never touches |
 |-------|-------|--------|---------------|
 | AI/Policy | Observations | Actions (dx,dy,attack) | Engine memory, DOM |
+
+## PWA / Service Worker
+
+- Service worker (`public/sw.js`) uses build-hash cache busting (injected by Vite plugin at build time)
+- Network-first for HTML, cache-first for hashed assets, stale-while-revalidate for WASM/icons
+- Auto-updates: checks every 60s, `skipWaiting` + `controllerchange` triggers reload
 
 ## Extending Safely
 
@@ -78,6 +97,7 @@ npm run build:wat    # Compile engine/core.wat → public/core.wasm
 - New weapon: add to `content/weapon-types.js` + upgrade in `upgrade-pool.js`
 - New system: create in `src/systems/`, wire in `src/main.js`
 - New policy: create in `src/ai/policies/`, call `registerPolicy()`, see `docs/extending.md`
+- New renderer backend: implement interface, register in manager, see `docs/extending.md`
 - WAT changes: edit `engine/core.wat`, run `npm run build:wat`, run `npm test`
 - See `docs/extending.md` for detailed instructions
 
@@ -87,4 +107,6 @@ Tests in `test/`: engine lifecycle, entity spawn/despawn, player movement,
 enemy pursuit and separation, projectile collision, damage and death,
 XP/leveling, weapon spawning, spawner placement, benchmark sanity,
 simulation determinism, policy interface, observations, scoring,
-upgrade strategies, batch harness output, evolution sanity.
+upgrade strategies, batch harness output, evolution sanity,
+renderer interface validation, WebGPU detection, preference persistence,
+renderer manager lifecycle.
