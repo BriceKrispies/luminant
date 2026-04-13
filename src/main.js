@@ -33,6 +33,7 @@ import { createMenuUI } from './ui/menu.js';
 import { createAppState, AppState, GameMode } from './ui/state.js';
 import { createTouchControls } from './ui/touch-controls.js';
 import { WEAPON_DEFS } from './content/weapon-types.js';
+import { UPGRADE_POOL } from './content/upgrade-pool.js';
 
 // Ensure built-in AI policies are registered (side-effect imports)
 import './ai/policies/survival.js';
@@ -119,12 +120,16 @@ async function main() {
   });
 
   // ── Game-over restarts via menu ──
+  const autoUpgradesEl = document.getElementById('auto-upgrades');
+
   function returnToMenu() {
     playing = false;
     gameOver = false;
     autoPlayer.enabled = false;
     input.setOverride(null);
     document.getElementById('auto-mode-badge').classList.add('hidden');
+    autoUpgradesEl.classList.add('hidden');
+    autoUpgradesEl.innerHTML = '';
     touch.hide();
     appState.setScreen(AppState.MENU);
   }
@@ -155,6 +160,8 @@ async function main() {
       autoPlayer.reset();
       input.setOverride(null); // auto-player sets override each frame
       document.getElementById('auto-mode-badge').classList.remove('hidden');
+      autoUpgradesEl.classList.remove('hidden');
+      autoUpgradesEl.innerHTML = '';
       touch.hide();
     } else {
       autoPlayer.enabled = false;
@@ -298,7 +305,18 @@ async function main() {
           if (autoPlayer.enabled) {
             // Auto-pick via policy's upgrade strategy
             const chosenId = autoPlayer.chooseUpgrade(choices);
-            skills.applyUpgrade(chosenId || choices[0].id);
+            const finalId = chosenId || choices[0].id;
+            skills.applyUpgrade(finalId);
+
+            // Show chosen upgrade on screen
+            const upgDef = UPGRADE_POOL.find(u => u.id === finalId);
+            if (upgDef) {
+              const entry = document.createElement('div');
+              entry.className = 'auto-upgrade-entry' +
+                (upgDef.tier === 1 ? ' tier-1' : upgDef.tier === 2 ? ' tier-2' : '');
+              entry.innerHTML = `<span class="upgrade-level">L${xpSystem.level}</span>${upgDef.name}`;
+              autoUpgradesEl.appendChild(entry);
+            }
           } else {
             levelUpUI.show(choices, (upgradeId) => {
               skills.applyUpgrade(upgradeId);

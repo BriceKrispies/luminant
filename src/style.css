@@ -193,6 +193,56 @@ html, body {
   50%      { opacity: 1; }
 }
 
+/* ── Auto upgrade log ── */
+#auto-upgrades {
+  position: absolute;
+  top: 42px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 15;
+  max-height: calc(100% - 100px);
+  overflow: hidden;
+}
+
+.auto-upgrade-entry {
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #cde;
+  background: rgba(40, 60, 100, 0.35);
+  border: 1px solid rgba(100, 180, 255, 0.2);
+  border-radius: 3px;
+  white-space: nowrap;
+  animation: upgrade-slide-in 0.3s ease-out;
+}
+
+.auto-upgrade-entry .upgrade-level {
+  color: #8af;
+  margin-right: 4px;
+}
+
+.auto-upgrade-entry.tier-1 {
+  color: #ffd080;
+  border-color: rgba(255, 200, 80, 0.3);
+  background: rgba(200, 140, 40, 0.2);
+}
+
+.auto-upgrade-entry.tier-2 {
+  color: #c8a0ff;
+  border-color: rgba(180, 120, 255, 0.3);
+  background: rgba(120, 60, 200, 0.2);
+}
+
+@keyframes upgrade-slide-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* ── HUD ── */
 #hud {
   position: absolute;
