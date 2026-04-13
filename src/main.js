@@ -30,8 +30,7 @@ import { addEffect, updateEffects, clearEffects } from './renderer/effects.js';
 import { createLevelUpUI } from './ui/level-up.js';
 import { createGameOverUI } from './ui/game-over.js';
 import { createMenuUI } from './ui/menu.js';
-import { createAppState, AppState, GameMode } from './ui/state.js';
-import { createTouchControls } from './ui/touch-controls.js';
+import { createAppState, AppState } from './ui/state.js';
 import { WEAPON_DEFS } from './content/weapon-types.js';
 import { UPGRADE_POOL } from './content/upgrade-pool.js';
 
@@ -111,17 +110,6 @@ async function main() {
     rendererBadge.addEventListener('click', () => rendererManager.toggle());
   }
 
-  // ── Touch controls ──
-  const touchContainer = document.getElementById('touch-controls');
-  const touch = createTouchControls(touchContainer);
-  input.setTouchSource(touch);
-
-  // Show touch controls on touch devices
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (isTouchDevice) {
-    touchContainer.classList.add('touch-enabled');
-  }
-
   // ── App state + menu ──
   const appState = createAppState();
   const menuUI = createMenuUI(document.getElementById('menu-layer'), appState);
@@ -168,9 +156,9 @@ async function main() {
     projMs: 0, collisionMs: 0, deathsMs: 0, renderMs: 0,
   };
 
-  // ── Step 2: Menu — wait for user to pick a mode ──
+  // ── Step 2: Menu — wait for user to start ──
   menuUI.onStart((mode, policyId) => {
-    startGame(mode, policyId);
+    startGame(policyId);
   });
 
   // ── Game-over restarts via menu ──
@@ -181,14 +169,12 @@ async function main() {
     gameOver = false;
     autoPlayer.enabled = false;
     input.setOverride(null);
-    document.getElementById('auto-mode-badge').classList.add('hidden');
     autoUpgradesEl.classList.add('hidden');
     autoUpgradesEl.innerHTML = '';
-    touch.hide();
     appState.setScreen(AppState.MENU);
   }
 
-  function startGame(mode, policyId) {
+  function startGame(policyId) {
     gameOver = false;
     playing = true;
     adrenalineActive = false;
@@ -207,22 +193,12 @@ async function main() {
     director = createDirectorSystem(engine, spawner);
     clock.start();
 
-    // Mode setup
-    if (mode === GameMode.AUTO) {
-      autoPlayer.enabled = true;
-      autoPlayer.setPolicy(policyId || 'survival');
-      autoPlayer.reset();
-      input.setOverride(null); // auto-player sets override each frame
-      document.getElementById('auto-mode-badge').classList.remove('hidden');
-      autoUpgradesEl.classList.remove('hidden');
-      autoUpgradesEl.innerHTML = '';
-      touch.hide();
-    } else {
-      autoPlayer.enabled = false;
-      input.setOverride(null);
-      document.getElementById('auto-mode-badge').classList.add('hidden');
-      if (isTouchDevice) touch.show();
-    }
+    autoPlayer.enabled = true;
+    autoPlayer.setPolicy(policyId || 'survival');
+    autoPlayer.reset();
+    input.setOverride(null);
+    autoUpgradesEl.classList.remove('hidden');
+    autoUpgradesEl.innerHTML = '';
 
     appState.setScreen(AppState.PLAYING);
   }
@@ -433,7 +409,7 @@ async function main() {
         phase: director ? director.waveIndex : 0,
         elites: elites.activeEliteCount,
         renderer: rendererManager.activeName,
-        mode: autoPlayer.enabled ? 'auto' : 'manual',
+        mode: 'auto',
         policyName: autoPlayer.policyName,
         autoAction: autoPlayer._lastAction,
       });

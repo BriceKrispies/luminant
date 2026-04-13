@@ -4,7 +4,7 @@
  * Does NOT touch engine or game systems — only communicates via callbacks.
  */
 
-import { AppState, GameMode } from './state.js';
+import { AppState } from './state.js';
 import { listPolicies } from '../ai/policy-types.js';
 
 // Ensure policies are registered
@@ -39,16 +39,11 @@ export function createMenuUI(container, appState) {
         <p class="menu-subtitle">Survive the swarm</p>
         <div class="menu-buttons">
           ${showResume ? '<button class="glow-btn menu-btn" data-action="resume">RESUME</button>' : ''}
-          <button class="glow-btn menu-btn" data-action="start">START GAME</button>
-          <div class="menu-auto-group">
-            <button class="glow-btn menu-btn menu-btn--auto" data-action="auto">AUTO MODE</button>
-            <select class="policy-select" id="policy-select">${policyOptions}</select>
-          </div>
+          <button class="glow-btn menu-btn" data-action="auto">START</button>
+          <select class="policy-select" id="policy-select">${policyOptions}</select>
         </div>
         <div class="menu-hint">
-          <p>WASD to move &middot; Click to attack</p>
-          <p>Touch: joystick + attack button</p>
-          <p>F3: debug overlay</p>
+          <p>F3: debug overlay &middot; F4: toggle renderer</p>
         </div>
       </div>
     `;
@@ -65,14 +60,9 @@ export function createMenuUI(container, appState) {
     container.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const action = e.currentTarget.dataset.action;
-        if (action === 'start') {
-          appState.setMode(GameMode.MANUAL);
+        if (action === 'auto') {
           appState.setScreen(AppState.PLAYING);
-          if (onStart) onStart(GameMode.MANUAL);
-        } else if (action === 'auto') {
-          appState.setMode(GameMode.AUTO);
-          appState.setScreen(AppState.PLAYING);
-          if (onStart) onStart(GameMode.AUTO, selectedPolicy);
+          if (onStart) onStart(null, selectedPolicy);
         } else if (action === 'resume') {
           appState.setScreen(AppState.PLAYING);
         }
