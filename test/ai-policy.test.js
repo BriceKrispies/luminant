@@ -181,7 +181,8 @@ describe('Policy actions', () => {
       playerX: 2048, playerY: 2048,
       playerHP: 100, playerMaxHP: 100,
       hpRatio: 1, level: 1, xp: 0, xpToNext: 45, xpRatio: 0,
-      weapon: 'sword', cooldownReady: 1,
+      weapon: 'sword', weaponReady: true, weaponCooldownRatio: 0,
+      weaponRange: 75, enemiesInArc: 0,
       nearEnemyCount: 0, midEnemyCount: 0, farEnemyCount: 0,
       sectorDensity: new Array(8).fill(0),
       sectorThreat: new Array(8).fill(0),
@@ -192,6 +193,7 @@ describe('Policy actions', () => {
       recentDamageTaken: 0, gameTime: 10, wave: 0,
       totalKills: 0, totalEnemies: 0,
       worldW: 4096, worldH: 4096, distToEdge: 2048,
+      safestDirX: -1, safestDirY: 0,
       acquiredUpgrades: [], activeEffects: [],
       ...overrides,
     };
@@ -252,18 +254,20 @@ describe('Policy actions', () => {
   it('survival policy engages at melee range for sword', () => {
     const policy = createPolicy('survival');
     policy.reset();
-    // Enemy at 100px — outside melee but inside engage range
+    // Enemy at 70px — inside sword range, 1 enemy in arc
     const action = policy.act(makeObs({
       weapon: 'sword',
-      nearestEnemyDist: 100,
-      nearestEnemyX: 2148,
+      weaponRange: 75,
+      nearestEnemyDist: 70,
+      nearestEnemyX: 2118,
       nearestEnemyY: 2048,
       nearEnemyCount: 1,
       midEnemyCount: 1,
       farEnemyCount: 1,
+      enemiesInArc: 1,
+      weaponReady: true,
     }));
-    // Should approach (positive dx toward enemy)
-    expect(action.dx).toBeGreaterThan(0);
+    // Should attack — enemy is in range and in the arc
     expect(action.attack).toBe(true);
   });
 });

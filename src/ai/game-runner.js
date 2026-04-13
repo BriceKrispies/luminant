@@ -123,6 +123,8 @@ export async function runGame(options) {
         xp: xpSystem.xp,
         xpToNext: xpSystem.xpToNext,
         weapon: weapons.currentWeapon,
+        weaponReady: weapons.ready,
+        weaponCooldownRatio: weapons.cooldownRatio,
         gameTime,
         wave: director.waveIndex,
         totalKills: director.totalKills,

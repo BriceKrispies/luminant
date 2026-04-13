@@ -24,7 +24,7 @@ import { createCooldownSystem } from './systems/cooldowns.js';
 import { createFeedbackSystem } from './systems/feedback.js';
 import { createEliteSystem } from './systems/elite-system.js';
 import { createAutoPlayerSystem } from './systems/auto-player.js';
-import { createRenderer } from './renderer/renderer.js';
+import { createRendererManager } from './renderer/renderer-manager.js';
 import { createDebugOverlay } from './renderer/debug-overlay.js';
 import { addEffect, updateEffects, clearEffects } from './renderer/effects.js';
 import { createLevelUpUI } from './ui/level-up.js';
@@ -75,8 +75,41 @@ async function main() {
   const canvas = document.getElementById('game-canvas');
   const wasm = await loadEngine();
   const engine = new EngineBindings(wasm);
-  const renderer = createRenderer(canvas);
   const input = createInputSystem(canvas);
+
+  // ── Renderer manager (detects WebGPU, loads preference, inits renderer) ──
+  const rendererBadge = document.getElementById('renderer-badge');
+  const rendererManager = createRendererManager(canvas, {
+    onSwitch(id, name) {
+      if (rendererBadge) rendererBadge.textContent = name;
+      console.log(`[main] Renderer active: ${name}`);
+    },
+    onError(id, message) {
+      console.warn(`[main] Renderer error (${id}): ${message}`);
+      // Show brief toast if user tried to switch to unsupported backend
+      if (rendererBadge) {
+        const prev = rendererBadge.textContent;
+        rendererBadge.textContent = `${id}: not supported`;
+        rendererBadge.classList.add('renderer-badge--error');
+        setTimeout(() => {
+          rendererBadge.textContent = prev;
+          rendererBadge.classList.remove('renderer-badge--error');
+        }, 2000);
+      }
+    },
+  });
+  await rendererManager.init();
+
+  // Renderer toggle (keyboard shortcut: F4 or click badge)
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F4') {
+      e.preventDefault();
+      rendererManager.toggle();
+    }
+  });
+  if (rendererBadge) {
+    rendererBadge.addEventListener('click', () => rendererManager.toggle());
+  }
 
   // ── Touch controls ──
   const touchContainer = document.getElementById('touch-controls');
@@ -216,6 +249,8 @@ async function main() {
           xp: xpSystem.xp,
           xpToNext: xpSystem.xpToNext,
           weapon: weapons.currentWeapon,
+          weaponReady: weapons.ready,
+          weaponCooldownRatio: weapons.cooldownRatio,
           gameTime: clock.totalTime,
           wave: director ? director.waveIndex : 0,
           totalKills: director ? director.totalKills : 0,
@@ -378,7 +413,7 @@ async function main() {
       };
 
       const t1 = performance.now();
-      renderer.render(snapshot, camera, gameState);
+      rendererManager.render(snapshot, camera, gameState);
       timings.renderMs = performance.now() - t1;
 
       debugOverlay.update({
@@ -397,6 +432,7 @@ async function main() {
         time: clock.totalTime,
         phase: director ? director.waveIndex : 0,
         elites: elites.activeEliteCount,
+        renderer: rendererManager.activeName,
         mode: autoPlayer.enabled ? 'auto' : 'manual',
         policyName: autoPlayer.policyName,
         autoAction: autoPlayer._lastAction,
@@ -406,7 +442,7 @@ async function main() {
 
   // ── Resize ──
   window.addEventListener('resize', () => {
-    renderer.resize();
+    rendererManager.resize();
     camera.resize(
       canvas.getBoundingClientRect().width,
       canvas.getBoundingClientRect().height

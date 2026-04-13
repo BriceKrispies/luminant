@@ -30,6 +30,16 @@ export function createWeaponSystem(engine, deps = {}) {
     get projectileSpeedMultiplier() { return projectileSpeedMultiplier; },
     set projectileSpeedMultiplier(v) { projectileSpeedMultiplier = v; },
 
+    /** True when cooldown has elapsed and weapon can fire */
+    get ready() { return cooldownTimer <= 0; },
+    /** Fraction of cooldown remaining (0 = ready, 1 = just fired) */
+    get cooldownRatio() {
+      if (cooldownTimer <= 0) return 0;
+      const def = WEAPON_DEFS[currentWeapon];
+      if (!def) return 0;
+      return cooldownTimer / (def.cooldown * cooldownMultiplier);
+    },
+
     update(dt, playerX, playerY, targetX, targetY, attackRequested, skills) {
       // Tick stuns
       for (const [id, stun] of stunnedEnemies) {

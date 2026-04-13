@@ -8,7 +8,7 @@ Top-down survival-action game with WAT/WASM engine core.
 - **Bindings**: JS bridge over WASM memory (`src/engine/`)
 - **Systems**: Game logic in JS (`src/systems/`)
 - **AI/Policy**: Policy-driven auto mode + observations + scoring (`src/ai/`)
-- **Renderer**: Canvas 2D with layered drawing (`src/renderer/`)
+- **Renderer**: Dual-backend with manager (`src/renderer/`) — WebGPU default, Canvas 2D fallback
 - **Content**: Data definitions (`src/content/`)
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
 

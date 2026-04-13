@@ -33,8 +33,8 @@ const DEFAULT_PARAMS = {
   pickupMaxDist: 200,      // ignore pickups further than this
 
   // Attack
-  alwaysAttack: true,      // attack whenever enemies are in observation
-  attackRange: 80,         // attack if nearest enemy within this
+  attackMinEnemies: 1,     // need at least this many enemies in arc to swing
+  attackMaxDist: 1.1,      // attack if nearest enemy within weaponRange * this
 
   // Upgrade preferences (weights for categories)
   upgradePrefs: {
@@ -88,14 +88,13 @@ function createSurvivalPolicy(overrides = {}) {
         const normY = eDy / eDist;
 
         if (obs.nearEnemyCount >= params.densityFleeThreshold) {
-          // High density: flee from highest-threat sector
-          const threatDir = getMaxThreatDirection(obs);
-          dx = -threatDir.x * params.fleeWeight;
-          dy = -threatDir.y * params.fleeWeight;
+          // High density: flee toward safest gap (stable, won't oscillate)
+          dx = obs.safestDirX * params.fleeWeight;
+          dy = obs.safestDirY * params.fleeWeight;
         } else if (eDist < params.dangerRadius) {
-          // Too close — flee
-          dx = -normX * params.fleeWeight;
-          dy = -normY * params.fleeWeight;
+          // Too close — flee toward safest direction
+          dx = obs.safestDirX * params.fleeWeight * 0.6 - normX * params.fleeWeight * 0.4;
+          dy = obs.safestDirY * params.fleeWeight * 0.6 - normY * params.fleeWeight * 0.4;
         } else if (eDist > params.engageRadius) {
           // Too far — approach
           dx = normX * 0.7;
@@ -148,10 +147,10 @@ function createSurvivalPolicy(overrides = {}) {
         lastMoveAngle = Math.atan2(dy, dx);
       }
 
-      // Attack decision
-      const shouldAttack = hasEnemy && (
-        params.alwaysAttack || obs.nearestEnemyDist < params.attackRange
-      );
+      // Attack decision: only swing when it'll actually connect
+      const inRange = obs.nearestEnemyDist < obs.weaponRange * params.attackMaxDist;
+      const worthSwinging = obs.enemiesInArc >= params.attackMinEnemies;
+      const shouldAttack = hasEnemy && inRange && worthSwinging && obs.weaponReady;
 
       return {
         dx, dy,

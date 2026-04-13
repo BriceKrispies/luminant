@@ -28,6 +28,23 @@
 2. Add drawing code in the `drawEffects` function
 3. Trigger with `addEffect(type, x, y, data)` from game code
 
+## Adding a New Renderer Backend
+
+1. Create a file in `src/renderer/`, e.g. `my-renderer.js`
+2. Export a factory: `createMyRenderer(canvas)` returning an object with:
+   - `id` — machine identifier (e.g. `'webgl'`)
+   - `name` — human-readable name (e.g. `'WebGL 2'`)
+   - `async init()` — acquire context and set up resources
+   - `resize()` — handle canvas/viewport resize
+   - `render(snapshot, camera, gameState)` — draw a frame
+   - `dispose()` — release resources and event listeners
+3. Use `validateRenderer(renderer)` from `renderer-interface.js` to verify the contract
+4. Register the backend in `renderer-manager.js`:
+   - Add detection logic (like `detectWebGPU()`)
+   - Add the ID to the factory switch in `_startRenderer()`
+   - Add to the `available` getter
+5. Runtime switching (F4 / badge click) and preference persistence are handled automatically
+
 ## Adding a New System
 
 1. Create a file in `src/systems/`

@@ -8,6 +8,7 @@
  */
 
 import { STATE } from '../engine/bindings.js';
+import { WEAPON_DEFS } from '../content/weapon-types.js';
 
 /** Number of directional sectors for density/threat analysis */
 const NUM_SECTORS = 8;
@@ -30,7 +31,10 @@ const FAR_RADIUS = 500;
  * @property {number} xpToNext
  * @property {number} xpRatio — 0-1 progress to next level
  * @property {string} weapon — current weapon id
- * @property {number} cooldownReady — 1 if weapon ready, 0 if on cooldown (approximated)
+ * @property {boolean} weaponReady — true if weapon cooldown has elapsed
+ * @property {number} weaponCooldownRatio — 0 = ready, 1 = just fired
+ * @property {number} weaponRange — effective range of current weapon in pixels
+ * @property {number} enemiesInArc — enemies within weapon range and attack cone
  * @property {number} nearEnemyCount — enemies within NEAR_RADIUS
  * @property {number} midEnemyCount — enemies within MID_RADIUS
  * @property {number} farEnemyCount — enemies within FAR_RADIUS
@@ -74,6 +78,7 @@ export function createObservationBuilder(engine) {
       const {
         playerX, playerY, playerHP, playerMaxHP,
         level, xp, xpToNext, weapon,
+        weaponReady, weaponCooldownRatio,
         gameTime, wave, totalKills,
         acquiredUpgrades, activeEffects,
         worldW, worldH,
@@ -152,8 +157,59 @@ export function createObservationBuilder(engine) {
         }
       }
 
+      // Weapon-aware attack signals
+      const wepId = weapon || 'sword';
+      const wepDef = WEAPON_DEFS[wepId] || WEAPON_DEFS.sword;
+      // Effective range: melee uses range directly; projectiles use speed * lifetime
+      const weaponRange = wepDef.range || (wepDef.projectileSpeed || 300) * (wepDef.lifetime || 1);
+      const weaponConeHalf = (wepDef.coneAngle || Math.PI * 2) / 2; // full circle for projectiles
+
+      // Count enemies that would actually be hit if we attacked toward nearestEnemy right now
+      let enemiesInArc = 0;
+      if (nearestEnemyDist < weaponRange * 1.2) {
+        const aimAngle = nearestEnemyAngle;
+        // Re-scan nearby for entities in the attack arc
+        const arcQuery = engine.gridQuery(playerX, playerY, weaponRange);
+        for (const id of arcQuery) {
+          const type = engine.getEntityType(id);
+          if (type < 2 || type > 9) continue;
+          if (engine.getEntityState(id) !== STATE.ACTIVE) continue;
+          const ex = engine.getEntityX(id);
+          const ey = engine.getEntityY(id);
+          const ang = Math.atan2(ey - playerY, ex - playerX);
+          let diff = ang - aimAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (Math.abs(diff) <= weaponConeHalf) enemiesInArc++;
+        }
+      }
+
       // Distance to nearest world edge
       const distToEdge = Math.min(playerX, playerY, worldW - playerX, worldH - playerY);
+
+      // Safest escape direction: the sector with the least threat,
+      // biased toward sectors that also lead away from world edges.
+      // This gives policies a stable flee vector that won't flip-flop
+      // when surrounded — unlike nearest-enemy which changes every tick.
+      let safestAngle = 0;
+      let minThreat = Infinity;
+      for (let i = 0; i < NUM_SECTORS; i++) {
+        // Combine density and threat — an empty sector with no enemies is ideal
+        const sectorScore = sectorThreat[i] + sectorDensity[i] * 10;
+        const ang = ((i + 0.5) / NUM_SECTORS) * Math.PI * 2 - Math.PI;
+        // Penalize directions that lead toward world edges
+        const testX = playerX + Math.cos(ang) * 200;
+        const testY = playerY + Math.sin(ang) * 200;
+        const edgePenalty =
+          (testX < 0 || testX > worldW || testY < 0 || testY > worldH) ? 1000 : 0;
+        const total = sectorScore + edgePenalty;
+        if (total < minThreat) {
+          minThreat = total;
+          safestAngle = ang;
+        }
+      }
+      const safestDirX = Math.cos(safestAngle);
+      const safestDirY = Math.sin(safestAngle);
 
       return {
         playerX, playerY,
@@ -163,8 +219,11 @@ export function createObservationBuilder(engine) {
         xp,
         xpToNext,
         xpRatio: xpToNext > 0 ? xp / xpToNext : 0,
-        weapon: weapon || 'sword',
-        cooldownReady: 1, // approximation; actual cooldown is in weapon system
+        weapon: wepId,
+        weaponReady: weaponReady !== undefined ? weaponReady : true,
+        weaponCooldownRatio: weaponCooldownRatio || 0,
+        weaponRange,
+        enemiesInArc,
         nearEnemyCount,
         midEnemyCount,
         farEnemyCount,
@@ -186,6 +245,8 @@ export function createObservationBuilder(engine) {
         worldW: worldW || 4096,
         worldH: worldH || 4096,
         distToEdge,
+        safestDirX,
+        safestDirY,
         acquiredUpgrades: acquiredUpgrades || [],
         activeEffects: activeEffects || [],
       };

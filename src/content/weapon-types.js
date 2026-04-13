@@ -10,7 +10,7 @@ export const WEAPON_DEFS = {
     name: 'Sword',
     pattern: 'cone',
     damage: 35,
-    cooldown: 0.35,
+    cooldown: 0.5,
     range: 75,
     coneAngle: 1.2,        // radians (~70 degrees total)
     stunDuration: 0.25,    // seconds enemies are slowed

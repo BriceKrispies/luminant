@@ -7,6 +7,7 @@ let noiseCtx = null;
 
 function ensureNoiseTexture() {
   if (noiseCanvas) return;
+  if (typeof document === 'undefined') return;
   noiseCanvas = document.createElement('canvas');
   noiseCanvas.width = 256;
   noiseCanvas.height = 256;
@@ -32,13 +33,15 @@ export function drawGround(ctx, view, camera) {
   const startX = Math.floor(view.left / tileSize) * tileSize;
   const startY = Math.floor(view.top / tileSize) * tileSize;
 
-  ctx.globalAlpha = 0.6;
-  for (let x = startX; x < view.right + tileSize; x += tileSize) {
-    for (let y = startY; y < view.bottom + tileSize; y += tileSize) {
-      ctx.drawImage(noiseCanvas, x, y, tileSize, tileSize);
+  if (noiseCanvas) {
+    ctx.globalAlpha = 0.6;
+    for (let x = startX; x < view.right + tileSize; x += tileSize) {
+      for (let y = startY; y < view.bottom + tileSize; y += tileSize) {
+        ctx.drawImage(noiseCanvas, x, y, tileSize, tileSize);
+      }
     }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   // Subtle grid lines
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.015)';

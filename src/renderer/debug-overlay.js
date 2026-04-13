@@ -45,6 +45,11 @@ export function createDebugOverlay(element) {
         `Time: ${(data.time || 0).toFixed(1)}s`,
       ];
 
+      // Renderer info
+      if (data.renderer) {
+        lines.push(`Renderer: ${data.renderer}`);
+      }
+
       // Mode + policy info
       if (data.mode) {
         lines.push('');

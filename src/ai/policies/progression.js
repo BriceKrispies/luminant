@@ -20,6 +20,7 @@ const DEFAULT_PARAMS = {
   rangedEngageRadius: 100,   // preferred ranged distance
   chargeThreshold: 6,        // charge into groups of this size for AoE value
   chargeWeight: 0.5,         // how aggressively to charge clusters
+  surroundedThreshold: 5,    // treat as surrounded when this many enemies nearby
   edgeAvoidDist: 80,
   edgeAvoidWeight: 1.0,
 
@@ -29,8 +30,9 @@ const DEFAULT_PARAMS = {
   xpPickupPriority: 1.5,    // extra weight on XP pickups vs health
 
   // Attack
-  alwaysAttack: true,
-  aggressiveRange: 200,      // will move toward enemies at this range
+  attackMinEnemies: 1,       // swing if at least 1 enemy in arc
+  attackMaxDist: 1.3,        // more generous range check (aggressive)
+  attackClusterBonus: 3,     // swing immediately if this many in arc (AoE value)
 
   // Risk tolerance
   lowHPFleeThreshold: 0.2,  // only flee when very low HP
@@ -78,13 +80,18 @@ function createProgressionPolicy(overrides = {}) {
       const lowHP = obs.hpRatio < params.lowHPFleeThreshold;
       const preferredDist = getPreferredDist(obs);
 
-      // Panic flee when very low HP
+      // When surrounded or panicking, use sector-based escape (stable direction)
+      // instead of nearest-enemy flee (flips every tick → jitter)
+      const surrounded = obs.nearEnemyCount >= params.surroundedThreshold;
+
       if (lowHP && hasEnemy && obs.nearestEnemyDist < 100) {
-        const eDx = obs.nearestEnemyX - obs.playerX;
-        const eDy = obs.nearestEnemyY - obs.playerY;
-        const eDist = obs.nearestEnemyDist || 1;
-        dx = -(eDx / eDist);
-        dy = -(eDy / eDist);
+        // Panic flee — use safest escape direction to avoid oscillation
+        dx = obs.safestDirX;
+        dy = obs.safestDirY;
+      } else if (surrounded && obs.hpRatio < 0.5) {
+        // Surrounded and taking pressure — commit to the gap
+        dx = obs.safestDirX;
+        dy = obs.safestDirY;
       } else if (hasEnemy) {
         const eDx = obs.nearestEnemyX - obs.playerX;
         const eDy = obs.nearestEnemyY - obs.playerY;
@@ -101,14 +108,18 @@ function createProgressionPolicy(overrides = {}) {
           const denseDir = getMaxDensityDirection(obs);
           dx = denseDir.x * params.chargeWeight + normX * 0.5;
           dy = denseDir.y * params.chargeWeight + normY * 0.5;
+        } else if (surrounded) {
+          // Surrounded but healthy — push toward safest gap while still engaging
+          dx = obs.safestDirX * 0.7 + normX * 0.3;
+          dy = obs.safestDirY * 0.7 + normY * 0.3;
         } else if (eDist > preferredDist * 1.3) {
           // Too far — close distance aggressively
           dx = normX * 0.9;
           dy = normY * 0.9;
         } else if (eDist < params.dangerRadius && obs.hpRatio < 0.4) {
-          // Very close and somewhat low — slight retreat
-          dx = -normX * 0.5;
-          dy = -normY * 0.5;
+          // Very close and somewhat low — escape via safest direction
+          dx = obs.safestDirX * 0.7 - normX * 0.3;
+          dy = obs.safestDirY * 0.7 - normY * 0.3;
         } else if (eDist < preferredDist * 0.7) {
           // Slightly too close — strafe
           const perpX = -normY;
@@ -146,9 +157,16 @@ function createProgressionPolicy(overrides = {}) {
       dx /= len;
       dy /= len;
 
+      // Attack decision: swing when enemies are hittable, bias toward clusters
+      const inRange = obs.nearestEnemyDist < obs.weaponRange * params.attackMaxDist;
+      const worthSwinging = obs.enemiesInArc >= params.attackMinEnemies;
+      const clusterOpportunity = obs.enemiesInArc >= params.attackClusterBonus;
+      // Progression is eager: attack on cluster opportunity even if not perfectly ready
+      const shouldAttack = hasEnemy && inRange && (worthSwinging && obs.weaponReady || clusterOpportunity);
+
       return {
         dx, dy,
-        attack: hasEnemy && (params.alwaysAttack || obs.nearestEnemyDist < params.aggressiveRange),
+        attack: shouldAttack,
         targetX: obs.nearestEnemyX,
         targetY: obs.nearestEnemyY,
       };

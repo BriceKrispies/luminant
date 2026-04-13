@@ -5,7 +5,7 @@
 Luminant is a top-down survival-action game built with:
 - **Engine core**: Raw WAT (WebAssembly Text) compiled to WASM
 - **Orchestration**: Vanilla JavaScript (ES modules)
-- **Rendering**: HTML Canvas 2D
+- **Rendering**: Dual-backend (WebGPU default, Canvas 2D fallback)
 - **Tooling**: Vite + Vitest
 
 ## Module Boundaries
@@ -16,7 +16,7 @@ Luminant is a top-down survival-action game built with:
 │  index.html + src/main.js + src/style.css               │
 ├─────────────┬───────────────┬───────────────────────────┤
 │  Renderer   │  Game Systems │  Content/Data             │
-│  (canvas)   │  (JS logic)   │  (definitions)            │
+│  (mgr+back) │  (JS logic)   │  (definitions)            │
 ├─────────────┤               ├───────────────────────────┤
 │             │               │  AI / Policy Layer        │
 │             │               │  Observations · Policies  │
@@ -75,13 +75,17 @@ Luminant is a top-down survival-action game built with:
 - `policies/progression.js` — XP/progression-focused heuristic policy
 
 ### Renderer (`src/renderer/`)
-- `renderer.js` — orchestrates layered drawing
-- `ground.js` — tiled noise texture ground
+- `renderer-interface.js` — backend contract (id, name, init, resize, render, dispose)
+- `renderer-manager.js` — capability detection, preference persistence, runtime switching
+- `canvas-renderer.js` — Canvas 2D backend (layered drawing)
+- `webgpu-renderer.js` — WebGPU backend (instanced rendering, WGSL shaders)
+- `renderer.js` — re-export shim for backward compatibility
+- `ground.js` — tiled noise texture ground (Canvas 2D)
 - `fog.js` — screen-space vignette
 - `lights.js` — dynamic colored light pools
-- `entities.js` — player, enemy, projectile, pickup rendering
+- `entities.js` — player, enemy, projectile, pickup rendering (Canvas 2D)
 - `effects.js` — hit/death/levelup visual effects
-- `ui-render.js` — in-canvas HUD (HP, XP, level, kills)
+- `ui-render.js` — in-canvas HUD (HP, XP, level, kills), shared by both backends
 - `debug-overlay.js` — FPS/entity/timing debug display
 
 ## Key Invariants
@@ -144,7 +148,7 @@ Luminant is a top-down survival-action game built with:
 7. Director system spawns enemies based on wave table
 8. Camera follows player
 9. Snapshot created from engine memory
-10. Renderer draws snapshot to canvas
+10. Renderer manager dispatches snapshot to active backend (WebGPU or Canvas 2D)
 ```
 
 ## Auto Mode / AI Data Flow

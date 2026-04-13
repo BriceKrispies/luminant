@@ -11,7 +11,7 @@ export function createCameraSystem(canvasW, canvasH, worldW, worldH) {
   let zoom = 1;
   let targetX = x;
   let targetY = y;
-  let followSpeed = 5;
+  let followSpeed = 18;
   let shake = 0;
   let shakeDecay = 8;
   let impulseX = 0;
