@@ -443,6 +443,13 @@ html, body {
     top: 0;
     padding-top: calc(8px + env(safe-area-inset-top, 0px));
   }
+  /* Push badge and upgrade log below HUD on mobile */
+  #auto-mode-badge {
+    top: calc(36px + env(safe-area-inset-top, 0px));
+  }
+  #auto-upgrades {
+    top: calc(66px + env(safe-area-inset-top, 0px));
+  }
 }
 
 /* ── Debug overlay ── */
@@ -474,4 +481,6 @@ html, body {
   .upgrade-card p { font-size: 0.75rem; }
   #hud { padding: 8px 12px; gap: 12px; }
   .hp-bar { flex: 0 0 120px; }
+  .auto-upgrade-entry { font-size: 0.6rem; padding: 2px 8px; }
+  #auto-mode-badge { font-size: 0.65rem; padding: 4px 10px; }
 }
