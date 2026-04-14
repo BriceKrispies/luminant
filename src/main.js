@@ -27,9 +27,9 @@ import { createAutoPlayerSystem } from './systems/auto-player.js';
 import { createRendererManager } from './renderer/renderer-manager.js';
 import { createDebugOverlay } from './renderer/debug-overlay.js';
 import { addEffect, updateEffects, clearEffects } from './renderer/effects.js';
-import { createLevelUpUI } from './ui/level-up.js';
 import { createGameOverUI } from './ui/game-over.js';
 import { createMenuUI } from './ui/menu.js';
+import { createUpgradePicker } from './ui/upgrade-picker.js';
 import { createAppState, AppState } from './ui/state.js';
 import { WEAPON_DEFS } from './content/weapon-types.js';
 import { UPGRADE_POOL } from './content/upgrade-pool.js';
@@ -143,7 +143,6 @@ async function main() {
   const elites = createEliteSystem(engine, spawner);
   const autoPlayer = createAutoPlayerSystem(engine);
 
-  const levelUpUI = createLevelUpUI(document.getElementById('level-up-screen'));
   const gameOverUI = createGameOverUI(document.getElementById('game-over-screen'));
 
   let director = null;
@@ -164,11 +163,34 @@ async function main() {
   // ── Game-over restarts via menu ──
   const autoUpgradesEl = document.getElementById('auto-upgrades');
 
+  const upgradePicker = createUpgradePicker(
+    document.getElementById('upgrade-picker'),
+    {
+      autoPlayer,
+      onPick(upgradeId, level) {
+        skills.applyUpgrade(upgradeId);
+        logUpgrade(upgradeId, level);
+      },
+    }
+  );
+
+  function logUpgrade(upgradeId, level) {
+    const upgDef = UPGRADE_POOL.find(u => u.id === upgradeId);
+    if (upgDef && autoUpgradesEl) {
+      const entry = document.createElement('div');
+      entry.className = 'auto-upgrade-entry' +
+        (upgDef.tier === 1 ? ' tier-1' : upgDef.tier === 2 ? ' tier-2' : '');
+      entry.innerHTML = `<span class="upgrade-level">L${level}</span>${upgDef.name}`;
+      autoUpgradesEl.appendChild(entry);
+    }
+  }
+
   function returnToMenu() {
     playing = false;
     gameOver = false;
     autoPlayer.enabled = false;
     input.setOverride(null);
+    upgradePicker.reset();
     autoUpgradesEl.classList.add('hidden');
     autoUpgradesEl.innerHTML = '';
     appState.setScreen(AppState.MENU);
@@ -197,6 +219,7 @@ async function main() {
     autoPlayer.setPolicy(policyId || 'survival');
     autoPlayer.reset();
     input.setOverride(null);
+    upgradePicker.reset();
     autoUpgradesEl.classList.remove('hidden');
     autoUpgradesEl.innerHTML = '';
 
@@ -209,7 +232,6 @@ async function main() {
 
     if (!playing || gameOver) return;
     if (appState.screen === AppState.PAUSED) return;
-    if (levelUpUI.active) return;
 
     const steps = clock.update(nowMs);
 
@@ -327,33 +349,13 @@ async function main() {
       camera.setTarget(pp.x, pp.y);
       camera.update(dt);
 
-      // Level-up
+      // Level-up — enqueue choices for the on-screen picker
       if (xpSystem.pendingLevelUps > 0) {
         const choices = skills.getUpgradeChoices(3);
         if (choices.length > 0) {
           xpSystem.consumeLevelUp();
           feedback.emit({ type: 'levelup', x: pp.x, y: pp.y });
-
-          if (autoPlayer.enabled) {
-            // Auto-pick via policy's upgrade strategy
-            const chosenId = autoPlayer.chooseUpgrade(choices);
-            const finalId = chosenId || choices[0].id;
-            skills.applyUpgrade(finalId);
-
-            // Show chosen upgrade on screen
-            const upgDef = UPGRADE_POOL.find(u => u.id === finalId);
-            if (upgDef) {
-              const entry = document.createElement('div');
-              entry.className = 'auto-upgrade-entry' +
-                (upgDef.tier === 1 ? ' tier-1' : upgDef.tier === 2 ? ' tier-2' : '');
-              entry.innerHTML = `<span class="upgrade-level">L${xpSystem.level}</span>${upgDef.name}`;
-              autoUpgradesEl.appendChild(entry);
-            }
-          } else {
-            levelUpUI.show(choices, (upgradeId) => {
-              skills.applyUpgrade(upgradeId);
-            });
-          }
+          upgradePicker.enqueue(choices, xpSystem.level);
         }
       }
 
@@ -361,6 +363,7 @@ async function main() {
       if (!player.isAlive()) {
         playing = false;
         gameOver = true;
+        upgradePicker.reset();
         gameOverUI.show({
           time: clock.totalTime,
           level: xpSystem.level,
