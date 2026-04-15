@@ -10,6 +10,10 @@ import { listPolicies } from '../ai/policy-types.js';
 // Ensure policies are registered
 import '../ai/policies/survival.js';
 import '../ai/policies/progression.js';
+import '../systems/player-ai/policies/coward.js';
+import '../systems/player-ai/policies/kiter.js';
+import '../systems/player-ai/policies/brawler.js';
+import '../systems/player-ai/policies/farmer.js';
 
 export function createMenuUI(container, appState) {
   let onStart = null;

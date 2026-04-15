@@ -188,8 +188,8 @@ export function createRendererManager(canvas, options = {}) {
     },
 
     /** Proxy: render a frame through the active renderer */
-    render(snapshot, camera, gameState) {
-      if (active) active.render(snapshot, camera, gameState);
+    render(snapshot, camera) {
+      if (active) active.render(snapshot, camera);
     },
 
     /** Dispose the active renderer and clean up */

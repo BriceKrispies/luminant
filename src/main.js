@@ -23,20 +23,20 @@ import { createCameraSystem } from './systems/camera.js';
 import { createCooldownSystem } from './systems/cooldowns.js';
 import { createFeedbackSystem } from './systems/feedback.js';
 import { createEliteSystem } from './systems/elite-system.js';
-import { createAutoPlayerSystem } from './systems/auto-player.js';
+import { createPlayerAISystem } from './systems/player-ai-system.js';
 import { createRendererManager } from './renderer/renderer-manager.js';
 import { createDebugOverlay } from './renderer/debug-overlay.js';
 import { addEffect, updateEffects, clearEffects } from './renderer/effects.js';
 import { createGameOverUI } from './ui/game-over.js';
 import { createMenuUI } from './ui/menu.js';
 import { createUpgradePicker } from './ui/upgrade-picker.js';
+import { createHUD } from './ui/hud.js';
 import { createAppState, AppState } from './ui/state.js';
 import { WEAPON_DEFS } from './content/weapon-types.js';
 import { UPGRADE_POOL } from './content/upgrade-pool.js';
 
-// Ensure built-in AI policies are registered (side-effect imports)
-import './ai/policies/survival.js';
-import './ai/policies/progression.js';
+// Utility-based policies are registered via player-ai-system.js imports.
+// Legacy policies (survival, progression) are also imported there.
 
 const WORLD_W = 4096;
 const WORLD_H = 4096;
@@ -141,9 +141,10 @@ async function main() {
   const skills = createSkillSystem(player, weapons);
   const cooldowns = createCooldownSystem();
   const elites = createEliteSystem(engine, spawner);
-  const autoPlayer = createAutoPlayerSystem(engine);
+  const autoPlayer = createPlayerAISystem(engine);
 
   const gameOverUI = createGameOverUI(document.getElementById('game-over-screen'));
+  const hud = createHUD(document.getElementById('hud'));
 
   let director = null;
   let playing = false;
@@ -193,6 +194,7 @@ async function main() {
     upgradePicker.reset();
     autoUpgradesEl.classList.add('hidden');
     autoUpgradesEl.innerHTML = '';
+    hud.hide();
     appState.setScreen(AppState.MENU);
   }
 
@@ -223,6 +225,7 @@ async function main() {
     autoUpgradesEl.classList.remove('hidden');
     autoUpgradesEl.innerHTML = '';
 
+    hud.show();
     appState.setScreen(AppState.PLAYING);
   }
 
@@ -239,7 +242,19 @@ async function main() {
       // Auto-player: compute AI input and inject as override
       if (autoPlayer.enabled) {
         const pp = player.getPosition();
-        // Feed game context for observation building
+
+        // Find nearest elite/boss for AI context
+        let bossPresent = false, bossX = 0, bossY = 0, bossDist = Infinity;
+        for (const eliteId of elites._activeEliteIds()) {
+          const ex = engine.getEntityX(eliteId);
+          const ey = engine.getEntityY(eliteId);
+          const ddx = ex - pp.x, ddy = ey - pp.y;
+          const d = Math.sqrt(ddx * ddx + ddy * ddy);
+          if (d < bossDist) {
+            bossX = ex; bossY = ey; bossDist = d; bossPresent = true;
+          }
+        }
+
         autoPlayer.setContext({
           playerHP: player.getHP(),
           playerMaxHP: player.getMaxHP(),
@@ -256,6 +271,10 @@ async function main() {
           activeEffects: [...skills.activeEffects],
           worldW: WORLD_W,
           worldH: WORLD_H,
+          bossPresent,
+          bossX,
+          bossY,
+          bossDist,
         });
         const aiInput = autoPlayer.update(pp.x, pp.y);
         if (aiInput) {
@@ -391,8 +410,10 @@ async function main() {
         weaponName: WEAPON_DEFS[weapons.currentWeapon]?.name || '',
       };
 
+      hud.update(gameState);
+
       const t1 = performance.now();
-      rendererManager.render(snapshot, camera, gameState);
+      rendererManager.render(snapshot, camera);
       timings.renderMs = performance.now() - t1;
 
       debugOverlay.update({
@@ -415,6 +436,7 @@ async function main() {
         mode: 'auto',
         policyName: autoPlayer.policyName,
         autoAction: autoPlayer._lastAction,
+        aiDebug: autoPlayer.debugData,
       });
     }
   }

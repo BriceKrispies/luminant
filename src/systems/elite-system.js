@@ -80,6 +80,11 @@ export function createEliteSystem(engine, spawner) {
       return activeElites.has(id);
     },
 
+    /** Iterate active elite entity IDs */
+    _activeEliteIds() {
+      return activeElites;
+    },
+
     reset() {
       timer = 0;
       eliteCount = 0;

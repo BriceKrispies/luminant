@@ -28,6 +28,46 @@
 2. Add drawing code in the `drawEffects` function
 3. Trigger with `addEffect(type, x, y, data)` from game code
 
+## Adding a New Creature Archetype
+
+The procedural creature system in `src/renderer/creatures/` draws enemies as
+skeleton-rigged animated creatures. Each enemy type maps to a visual archetype
+with a full rigging pipeline: skeleton → animation clips → overlays →
+secondary motion → expression → slot/attachment rendering.
+
+1. Add a new archetype definition in `src/renderer/creatures/archetypes.js`:
+   - `body` — shape type, aspect ratio, segment count, shape-specific params
+   - `eyes` — count, size, offset, spread, style (dot/glow/slit/angry)
+   - `palette` — base, highlight, glow, eye, interior colors (0-1 RGB arrays)
+   - `deform` — wobble, breathing, squash-stretch, hit, death animation config
+   - `variation` — ranges for seeded per-entity randomization
+   - `skeletonId`, `secondaryId`, `expressionId` — rig reference IDs
+2. Add rig data in `src/renderer/creatures/rig-data.js`:
+   - `SKELETON_DEFS[id]` — ordered bone array (root first, parents before children)
+   - `SLOT_DEFS[id]` — slot/attachment layout with draw ordering
+   - `CLIP_DEFS[id]` — animation clips (idle, locomotion, attack, hit_react, dying)
+   - `EXPRESSION_PROFILES[id]` — per-expression eye/brow params, blink config
+   - `OVERLAY_CONFIGS[id]` — breathing, hover bob, recoil, etc. parameters
+3. Register a secondary motion module in `src/renderer/creatures/secondaries.js`
+4. Add the entity type → archetype mapping in `TYPE_TO_ARCHETYPE`
+5. Add draw functions for any new body/attachment shapes in `draw-canvas.js`
+6. Add tests in `test/creatures.test.js` and `test/rigging.test.js`
+
+### Adding a New Creature Skin
+
+Skins allow palette/attachment/clip/profile variations without new archetypes:
+
+1. Create a `SkinDef` in `src/renderer/creatures/skins.js`
+2. Call `registerSkin(id, skinDef)` to register it
+3. Skin can override: `palette`, `slotOverrides`, `clipOverrides`,
+   `secondaryId`, `expressionId`, `variation`
+4. The resolver uses `resolveSkin(archetype, skin)` to merge overrides
+
+Existing mappings: basic→slime(blob), fast→ghost(wisp), tank→brute(hulk), ranged→ember(flame).
+
+The creature system is shared by both renderers. Canvas 2D draws creatures
+directly; WebGPU draws them on its Canvas 2D overlay canvas.
+
 ## Adding a New Renderer Backend
 
 1. Create a file in `src/renderer/`, e.g. `my-renderer.js`
@@ -70,7 +110,164 @@ The WAT module at `engine/core.wat` handles:
 
 After any WAT changes, rebuild with `npm run build:wat` and re-run tests.
 
+## Adding a New Rigged Character (Skeletal Animation)
+
+The skeletal animation system in `src/animation/` provides bone-driven mesh
+deformation for characters. The first rigged character is the ghost witch
+(ENEMY_FAST). To add a new one:
+
+### 1. Create a rig file
+
+Create `src/content/rigs/my-character-rig.js`:
+
+```js
+import { bone, slot, createSkeleton } from '../../animation/skeleton.js';
+import { createWeightedMesh } from '../../animation/mesh.js';
+
+const BONES = [
+  bone('root', -1, 0, { x: 0, y: 0 }),
+  bone('torso', 0, 5, { x: 0, y: -3 }),
+  // ... more bones (parent index must be < current index)
+];
+
+// Build meshes with per-vertex bone weights
+const BODY_MESH = createWeightedMesh([
+  { x: -3, y: -3, bones: [[1, 1.0]] },  // 100% torso
+  { x: 3, y: -3, bones: [[1, 0.7], [0, 0.3]] },  // 70% torso, 30% root
+  // ...
+], [0, 1, 2], '#1a0e2a');
+
+export const MY_SKELETON = createSkeleton(BONES, [], {});
+export const MY_MESHES = [BODY_MESH];
+export const MY_CONFIG = { hoverAmp: 0.5, ... };
+export const MY_CONSTRAINTS = { lookBone: 'head', trails: [] };
+```
+
+### 2. Create animation clips
+
+Create `src/content/animations/my-character-clips.js`:
+
+```js
+import { clip, track, kf } from '../../animation/clip.js';
+
+export const IDLE = clip('idle', 2.0, [
+  track('torso', { rot: [kf(0, 0), kf(1, 0.02), kf(2, 0)] }),
+], { loop: true });
+
+// Required clips: idle, drift, chase, hit_react, death, spawn
+export const MY_CLIPS = { idle: IDLE, ... };
+```
+
+### 3. Register in the renderer
+
+Edit `src/renderer/skinned-entities.js`:
+- Import the rig and clips
+- Add the entity type check in `isSkinnedEntity()`
+- Wire up the runtime creation in `getRuntimeForEntity()`
+
+### 4. Add tests
+
+Add tests in `test/animation.test.js` to verify:
+- All clip bone references are valid against the skeleton
+- Skinning produces non-zero vertices
+
+### Animation clip authoring tips
+
+- Keyframe times are in seconds, rotation in radians
+- Clips loop by default (`{ loop: false }` for one-shots like attack/death)
+- Only animate bones that need to move — others stay at bind pose
+- Procedural overlays (hover, lean, recoil) are applied automatically by the runtime
+
+### Runtime update order
+
+```
+Entity snapshot → Controller (state machine, clip selection)
+  → Sample base clip → Crossfade blend → Additive procedural layer
+  → World pose → Constraints (aim, trail) → IK → Skin meshes → Render
+```
+
 ## Adding a New AI Policy
+
+There are two approaches: **utility-based** (recommended) and **legacy**.
+
+### Utility-based policy (weight profile)
+
+The utility AI system in `src/systems/player-ai/` provides a shared decision pipeline.
+New policies are just weight profiles — no AI code needed.
+
+1. Create a file in `src/systems/player-ai/policies/`, e.g. `my-policy.js`
+2. Define a weight object covering intention weights, behavioral params, and upgrade preferences
+3. Use `createUtilityPolicy()` to create the policy from weights
+4. Call `registerPolicy()` at module level
+5. Import your policy in `src/systems/player-ai-system.js` and `src/ui/menu.js`
+
+Example:
+```js
+import { registerPolicy } from '../../../ai/policy-types.js';
+import { createUtilityPolicy, mergeWeights } from '../create-utility-policy.js';
+
+const MY_WEIGHTS = {
+  // Intention weights (higher = more likely to choose that intention)
+  flee: 1.0,
+  kite: 1.5,
+  hold_range: 1.0,
+  reposition_for_shot: 1.0,
+  collapse_on_cluster: 0.5,
+  collect_xp: 1.0,
+  boss_focus: 0.5,
+  maintain_pressure: 1.0,
+  hold_ground: 0.5,
+
+  // Candidate scoring
+  dangerWeight: 1.0,    // how much to penalize dangerous directions
+  rewardWeight: 1.0,    // how much to reward beneficial directions
+
+  // Behavioral params
+  survivalBias: 0.5,
+  preferredSpacing: 1.0, // multiplier on weapon preferred range
+  commitmentTime: 8,     // ticks before allowing intention switch
+  smoothingRate: 0.3,    // movement smoothing (0=sluggish, 1=instant)
+  retreatThreshold: 0.3, // HP ratio below which flee is boosted
+  damageRiskTolerance: 0.5,
+  attackEagerness: 1.0,
+
+  // Upgrade selection weights
+  upgradeWeights: {
+    survivability: 1.0, damage: 1.0, aoe: 1.0,
+    speed: 1.0, utility: 1.0, scaling: 1.0,
+  },
+};
+
+function createMyPolicy(overrides = {}) {
+  return createUtilityPolicy('My Policy', 'my-policy', mergeWeights(MY_WEIGHTS, overrides));
+}
+
+registerPolicy('my-policy', createMyPolicy);
+```
+
+#### Tuning utility weights
+
+- **Intention weights** control what the AI *wants* to do. Higher `flee` = more retreating,
+  higher `collapse_on_cluster` = more aggressive dives into groups.
+- **dangerWeight/rewardWeight** control how much directional danger and reward maps
+  influence candidate scoring.
+- **commitmentTime** prevents jitter — higher values mean the AI commits longer to each decision.
+- **retreatThreshold** sets the HP ratio at which the AI panics and flees regardless of intention.
+- **attackEagerness** controls how readily the AI swings at clusters.
+
+#### Adding new sensed signals
+
+Add new fields to `sensors.sense()` in `src/systems/player-ai/sensors.js`.
+Sensor data is a superset of observations — all existing observation fields are available.
+
+#### Adding new intentions
+
+1. Add the intention name to `INTENTIONS` in `src/systems/player-ai/utility-scorer.js`
+2. Add its scoring formula in `scoreIntentions()`
+3. Add its candidate fitness calculation in `scoreSingleCandidate()`
+4. Add a weight key for it in policy weight profiles
+
+### Legacy policy (custom AI)
 
 1. Create a file in `src/ai/policies/`, e.g. `my-policy.js`
 2. Import `registerPolicy` from `../policy-types.js`
@@ -82,25 +279,19 @@ After any WAT changes, rebuild with `npm run build:wat` and re-run tests.
    - `act(observation)` — returns `{ dx, dy, attack, targetX, targetY }`
    - `chooseUpgrade(choices, observation)` — returns upgrade id
 4. Call `registerPolicy(id, factory)` at module level
-5. Import your policy in `src/main.js` and harness files to register it
-6. The policy will auto-appear in the menu dropdown and CLI `--policy=` flag
+5. Import your policy in `src/systems/player-ai-system.js` and `src/ui/menu.js`
 
-Example:
 ```js
 import { registerPolicy } from '../policy-types.js';
 
 function createMyPolicy(params = {}) {
   return {
-    name: 'My Policy',
-    id: 'my-policy',
-    params,
+    name: 'My Policy', id: 'my-policy', params,
     reset() {},
     act(obs) {
       return { dx: 0, dy: 0, attack: true, targetX: obs.nearestEnemyX, targetY: obs.nearestEnemyY };
     },
-    chooseUpgrade(choices, obs) {
-      return choices[0]?.id;
-    },
+    chooseUpgrade(choices, obs) { return choices[0]?.id; },
   };
 }
 

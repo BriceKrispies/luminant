@@ -6,10 +6,30 @@
 import { TYPE, STATE } from '../engine/bindings.js';
 import { ENEMY_DEFS, TYPE_TO_KEY } from '../content/enemy-types.js';
 import { WEAPON_DEFS } from '../content/weapon-types.js';
+import { createCreatureResolver } from './creatures/creature-model.js';
+import { drawCreature } from './creatures/draw-canvas.js';
+import { getArchetype } from './creatures/archetypes.js';
+import { isSkinnedEntity, drawSkinnedEntity, resetSkinnedCache } from './skinned-entities.js';
+
+// Shared creature resolver for Canvas 2D renderer
+let creatureResolver = null;
+let lastSnapshotTime = -1;
+
+function getResolver() {
+  if (!creatureResolver) creatureResolver = createCreatureResolver();
+  return creatureResolver;
+}
+
+export function resetCreatureResolver() {
+  if (creatureResolver) creatureResolver.reset();
+}
 
 export function drawEntities(ctx, snapshot, camera) {
   const view = camera.getViewBounds();
   const margin = 50;
+  const resolver = getResolver();
+  const dt = snapshot.time - (lastSnapshotTime >= 0 ? lastSnapshotTime : snapshot.time);
+  lastSnapshotTime = snapshot.time;
 
   // Sort: pickups → enemies → projectiles → player (draw order)
   const pickups = [];
@@ -32,8 +52,19 @@ export function drawEntities(ctx, snapshot, camera) {
   // Draw pickups
   for (const p of pickups) drawPickup(ctx, p, snapshot.time);
 
-  // Draw enemies
-  for (const e of enemies) drawEnemy(ctx, e);
+  // Draw enemies — skinned > creature system > legacy fallback
+  for (const e of enemies) {
+    if (isSkinnedEntity(e)) {
+      drawSkinnedEntity(ctx, e, Math.max(dt, 1 / 60), snapshot.time);
+    } else {
+      const model = resolver.resolve(e, snapshot.time, Math.max(dt, 1 / 60));
+      if (model) {
+        drawCreature(ctx, model);
+      } else {
+        drawEnemy(ctx, e);
+      }
+    }
+  }
 
   // Draw projectiles
   for (const p of projectiles) drawProjectile(ctx, p);

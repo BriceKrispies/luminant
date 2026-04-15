@@ -34,6 +34,7 @@ export function createSnapshot(engine) {
       radius: buf.getFloat32(base + FIELD.RADIUS, true),
       damage: buf.getFloat32(base + FIELD.DAMAGE, true),
       speed: buf.getFloat32(base + FIELD.SPEED, true),
+      facing: buf.getFloat32(base + FIELD.FACING, true),
     };
 
     if (id === playerId) player = e;

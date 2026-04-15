@@ -61,11 +61,42 @@ export function createDebugOverlay(element) {
           const a = data.autoAction;
           lines.push(`Action: dx=${(a.dx||0).toFixed(2)} dy=${(a.dy||0).toFixed(2)} atk=${a.attack?'Y':'N'}`);
         }
+
+        // Utility AI debug info
+        const ai = data.aiDebug;
+        if (ai) {
+          lines.push('');
+          lines.push(`Intent: ${ai.intention}`);
+          lines.push(`Danger: ${(ai.danger||0).toFixed(2)}  Encircle: ${(ai.encirclement||0).toFixed(2)}`);
+          lines.push(`PrefRange: ${(ai.preferredRange||0).toFixed(0)}`);
+          if (ai.intentionScores) {
+            const sorted = Object.entries(ai.intentionScores)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4);
+            lines.push(`Scores: ${sorted.map(([k, v]) => `${k}:${v.toFixed(1)}`).join(' ')}`);
+          }
+          if (ai.topCandidates && ai.topCandidates.length > 0) {
+            const labels = ai.topCandidates.map(c => {
+              const tag = c.label || dirLabel(c.dirIndex);
+              return `${tag}(${c.score.toFixed(1)})`;
+            });
+            lines.push(`Candidates: ${labels.join(' ')}`);
+          }
+        }
       }
 
       element.textContent = lines.join('\n');
     },
   };
+}
+
+const DIR_LABELS = ['W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW'];
+function dirLabel(idx) {
+  if (idx >= 0 && idx < 8) return DIR_LABELS[idx];
+  if (idx === -1) return 'hold';
+  if (idx === -2) return 'orb+';
+  if (idx === -3) return 'orb-';
+  return '?';
 }
 
 function fmt(ms) {

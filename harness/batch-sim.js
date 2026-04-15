@@ -27,6 +27,10 @@ import { analyzeResults } from '../src/ai/analysis.js';
 // Register policies
 import '../src/ai/policies/survival.js';
 import '../src/ai/policies/progression.js';
+import '../src/systems/player-ai/policies/coward.js';
+import '../src/systems/player-ai/policies/kiter.js';
+import '../src/systems/player-ai/policies/brawler.js';
+import '../src/systems/player-ai/policies/farmer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');

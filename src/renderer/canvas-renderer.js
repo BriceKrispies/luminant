@@ -11,7 +11,7 @@ import { drawFog } from './fog.js';
 import { drawLights } from './lights.js';
 import { drawEntities } from './entities.js';
 import { drawEffects } from './effects.js';
-import { drawHUD } from './ui-render.js';
+
 
 export function createCanvasRenderer(canvas) {
   let ctx = null;
@@ -43,7 +43,7 @@ export function createCanvasRenderer(canvas) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     },
 
-    render(snapshot, camera, gameState) {
+    render(snapshot, camera) {
       const cw = canvas.getBoundingClientRect().width;
       const ch = canvas.getBoundingClientRect().height;
 
@@ -76,8 +76,6 @@ export function createCanvasRenderer(canvas) {
       // Layer 5: Fog overlay (screen-space)
       drawFog(ctx, cw, ch);
 
-      // Layer 6: HUD (screen-space)
-      drawHUD(ctx, cw, ch, gameState);
     },
 
     dispose() {

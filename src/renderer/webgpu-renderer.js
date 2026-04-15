@@ -16,8 +16,10 @@
 
 import { TYPE, STATE } from '../engine/bindings.js';
 import { ENEMY_DEFS, TYPE_TO_KEY } from '../content/enemy-types.js';
-import { drawHUD } from './ui-render.js';
 import { drawEffects } from './effects.js';
+import { createCreatureResolver } from './creatures/creature-model.js';
+import { drawCreature } from './creatures/draw-canvas.js';
+import { getArchetype } from './creatures/archetypes.js';
 
 // ── Shader source (WGSL) ──
 
@@ -203,8 +205,10 @@ export function createWebGPURenderer(canvas) {
   let resizeHandler = null;
 
   // HUD fallback — uses an offscreen Canvas 2D for text rendering
-  let hudCanvas = null;
-  let hudCtx = null;
+  let effectsCanvas = null;
+  let effectsCtx = null;
+  let creatureResolver = null;
+  let lastSnapshotTime = -1;
 
   return {
     id: 'webgpu',
@@ -318,11 +322,12 @@ export function createWebGPURenderer(canvas) {
       });
 
       // HUD overlay canvas (text rendering via Canvas 2D, composited by browser)
-      hudCanvas = document.createElement('canvas');
-      hudCanvas.id = 'webgpu-hud-overlay';
-      hudCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;';
-      canvas.parentElement.appendChild(hudCanvas);
-      hudCtx = hudCanvas.getContext('2d');
+      effectsCanvas = document.createElement('canvas');
+      effectsCanvas.id = 'webgpu-effects-overlay';
+      effectsCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;';
+      canvas.parentElement.appendChild(effectsCanvas);
+      effectsCtx = effectsCanvas.getContext('2d');
+      creatureResolver = createCreatureResolver();
 
       this.resize();
       resizeHandler = () => this.resize();
@@ -334,14 +339,14 @@ export function createWebGPURenderer(canvas) {
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
-      if (hudCanvas) {
-        hudCanvas.width = rect.width * dpr;
-        hudCanvas.height = rect.height * dpr;
-        hudCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (effectsCanvas) {
+        effectsCanvas.width = rect.width * dpr;
+        effectsCanvas.height = rect.height * dpr;
+        effectsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     },
 
-    render(snapshot, camera, gameState) {
+    render(snapshot, camera) {
       if (!device || !context) return;
 
       const cw = canvas.getBoundingClientRect().width;
@@ -371,10 +376,14 @@ export function createWebGPURenderer(canvas) {
       uniformData[23] = 0;              // padding
       device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
-      // Build instance data from snapshot
+      // Build instance data from snapshot (enemies drawn via creature overlay)
       const instanceData = new Float32Array(MAX_INSTANCES * 8);
       let count = 0;
       const margin = 50;
+      const creatureEnemies = []; // enemies to draw on overlay
+
+      const dt = snapshot.time - (lastSnapshotTime >= 0 ? lastSnapshotTime : snapshot.time);
+      lastSnapshotTime = snapshot.time;
 
       for (const e of snapshot.entities) {
         if (e.state === STATE.FREE) continue;
@@ -382,6 +391,12 @@ export function createWebGPURenderer(canvas) {
         // Frustum cull
         if (e.x < view.left - margin || e.x > view.right + margin ||
             e.y < view.top - margin || e.y > view.bottom + margin) continue;
+
+        // Enemies with archetypes go to creature overlay
+        if (e.type >= 2 && e.type <= 9 && getArchetype(e.type)) {
+          creatureEnemies.push(e);
+          continue;
+        }
 
         const off = count * 8;
         instanceData[off] = e.x;
@@ -396,6 +411,7 @@ export function createWebGPURenderer(canvas) {
         if (e.type === TYPE.PLAYER) {
           cr = 1; cg = 0.82; cb = 0.5;
         } else if (e.type >= 2 && e.type <= 9) {
+          // Fallback for enemies without archetypes
           const key = TYPE_TO_KEY[e.type];
           const def = key ? ENEMY_DEFS[key] : null;
           if (def && def.color) {
@@ -464,22 +480,24 @@ export function createWebGPURenderer(canvas) {
       pass.end();
       device.queue.submit([encoder.finish()]);
 
-      // Effects + HUD via Canvas 2D overlay
-      if (hudCtx) {
-        hudCtx.clearRect(0, 0, cw, ch);
+      // Creatures + effects via Canvas 2D overlay (world space)
+      if (effectsCtx) {
+        effectsCtx.clearRect(0, 0, cw, ch);
+        effectsCtx.save();
+        effectsCtx.translate(cw / 2, ch / 2);
+        effectsCtx.scale(camera.zoom, camera.zoom);
+        effectsCtx.translate(-camera.x, -camera.y);
 
-        // Draw effects in world space (slash, hit, death, pickup)
-        hudCtx.save();
-        hudCtx.translate(cw / 2, ch / 2);
-        hudCtx.scale(camera.zoom, camera.zoom);
-        hudCtx.translate(-camera.x, -camera.y);
-        drawEffects(hudCtx, snapshot, camera);
-        hudCtx.restore();
-
-        // HUD in screen space
-        if (gameState) {
-          drawHUD(hudCtx, cw, ch, gameState);
+        // Draw creature enemies on overlay
+        if (creatureResolver) {
+          for (const e of creatureEnemies) {
+            const model = creatureResolver.resolve(e, snapshot.time, Math.max(dt, 1 / 60));
+            if (model) drawCreature(effectsCtx, model);
+          }
         }
+
+        drawEffects(effectsCtx, snapshot, camera);
+        effectsCtx.restore();
       }
     },
 
@@ -488,11 +506,13 @@ export function createWebGPURenderer(canvas) {
         window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
       }
-      if (hudCanvas && hudCanvas.parentElement) {
-        hudCanvas.parentElement.removeChild(hudCanvas);
+      if (effectsCanvas && effectsCanvas.parentElement) {
+        effectsCanvas.parentElement.removeChild(effectsCanvas);
       }
-      hudCanvas = null;
-      hudCtx = null;
+      effectsCanvas = null;
+      effectsCtx = null;
+      if (creatureResolver) { creatureResolver.reset(); creatureResolver = null; }
+      lastSnapshotTime = -1;
       if (instanceBuffer) { instanceBuffer.destroy(); instanceBuffer = null; }
       if (uniformBuffer) { uniformBuffer.destroy(); uniformBuffer = null; }
       if (device) { device.destroy(); device = null; }

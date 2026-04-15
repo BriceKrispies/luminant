@@ -1,3 +1,14 @@
+/* ── Design Tokens ── */
+:root {
+  --hud-bg: rgba(10, 15, 30, 0.55);
+  --hud-border: rgba(100, 180, 255, 0.12);
+  --hud-text: #8a8f9a;
+  --hud-text-bright: #d0d4dc;
+  --hud-radius: 4px;
+  --hud-glow-blue: rgba(100, 180, 255, 0.4);
+  --hud-glow-red: rgba(228, 68, 68, 0.4);
+}
+
 /* ── Reset ── */
 *, *::before, *::after {
   margin: 0;
@@ -196,16 +207,16 @@ html, body {
 /* ── Renderer badge ── */
 #renderer-badge {
   position: absolute;
-  bottom: 12px;
+  bottom: 52px;
   right: 12px;
   padding: 4px 10px;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: #8a8;
-  background: rgba(40, 60, 40, 0.25);
-  border: 1px solid rgba(100, 180, 100, 0.2);
-  border-radius: 3px;
+  background: var(--hud-bg);
+  border: 1px solid rgba(100, 180, 100, 0.18);
+  border-radius: var(--hud-radius);
   pointer-events: all;
   cursor: pointer;
   z-index: 15;
@@ -278,42 +289,116 @@ html, body {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 12px 20px;
+  padding: 10px 16px;
   display: flex;
-  align-items: center;
-  gap: 20px;
+  align-items: flex-end;
+  justify-content: space-between;
   pointer-events: none;
   z-index: 5;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45) 0%, transparent 100%);
 }
 
+.hud-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hud-timer {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--hud-text);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.hud-weapon {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #667;
+  text-transform: uppercase;
+}
+
+/* HP cluster */
+.hud-hp-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--hud-radius);
+  transition: border-color 0.3s;
+}
+.hud-hp-group.hp-critical {
+  border-color: var(--hud-glow-red);
+}
+.hud-hp-group.hp-low {
+  border-color: rgba(228, 160, 68, 0.25);
+}
+.hud-hp-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--hud-text-bright);
+  white-space: nowrap;
+  min-width: 56px;
+}
+
+/* XP cluster */
+.hud-xp-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--hud-radius);
+}
+.hud-level {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 6px var(--hud-glow-blue);
+  white-space: nowrap;
+}
+
+/* Bars */
 .hud-bar {
-  height: 8px;
-  border-radius: 4px;
+  width: 120px;
+  height: 6px;
+  border-radius: 3px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 .hud-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.15s;
 }
-
-.hp-bar { flex: 0 0 200px; }
 .hp-bar .hud-bar-fill { background: linear-gradient(90deg, #e44, #f66); }
-
-.xp-bar { flex: 1; max-width: 400px; }
 .xp-bar .hud-bar-fill { background: linear-gradient(90deg, #4af, #6cf); }
 
-.hud-level {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 0 8px rgba(100, 180, 255, 0.5);
+/* Stats cluster (right side) */
+.hud-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 10px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--hud-radius);
 }
-
-.hud-kills, .hud-wave, .hud-timer {
-  font-size: 0.8rem;
-  color: #888;
+.hud-kills, .hud-wave {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--hud-text);
 }
 
 /* ── Level up screen ── */
@@ -610,8 +695,11 @@ html, body {
   }
   .upgrade-card h3 { font-size: 0.9rem; }
   .upgrade-card p { font-size: 0.75rem; }
-  #hud { padding: 8px 12px; gap: 12px; }
-  .hp-bar { flex: 0 0 120px; }
+  #hud { padding: 8px 12px; }
+  .hud-section { gap: 8px; }
+  .hud-bar { width: 80px; }
+  .hud-hp-group, .hud-xp-group, .hud-right { padding: 3px 8px; }
+  .hud-hp-label, .hud-kills, .hud-wave { font-size: 0.6rem; }
   .auto-upgrade-entry { font-size: 0.6rem; padding: 2px 8px; }
   .upgrade-picker-card {
     min-width: 100px;

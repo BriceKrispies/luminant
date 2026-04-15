@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(npm run:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:3005/src/renderer/creatures/creature-model.js)",
+      "Bash(kill %1)",
+      "Bash(npx vitest:*)",
+      "Bash(curl -s http://localhost:3005/studio/)",
+      "Bash(curl -s http://localhost:3006/studio/studio.js)",
+      "Bash(python3:*)",
+      "Bash(uv:*)",
+      "Bash(npm install:*)",
+      "Bash(node studio/render.js ghost)",
+      "Bash(node studio/render.js --all)",
+      "Bash(node studio/render.js ghost --bg=dark)",
+      "Bash(node studio/render.js ghost --size=768 --zoom=10 --bg=dark)",
+      "Bash(node studio/render.js ghost --size=512 --zoom=8)",
+      "Bash(node studio/render.js ghost --size=512 --zoom=8 --time=0)",
+      "Bash(node studio/render.js ghost --size=512)",
+      "WebSearch",
+      "Bash(node scripts/convert-svg.js docs/characters/char_01.svg ghost)"
+    ]
+  }
+}

@@ -15,9 +15,12 @@
     "sim": "node scripts/build-wat.js && node harness/batch-sim.js --runs=1",
     "batch": "node scripts/build-wat.js && node harness/batch-sim.js",
     "evolve": "node scripts/build-wat.js && node harness/evolve.js",
-    "debug": "node scripts/build-wat.js && vite --open /debug/"
+    "debug": "node scripts/build-wat.js && vite --open /debug/",
+    "studio": "vite --open /studio/",
+    "render": "node studio/render.js"
   },
   "devDependencies": {
+    "canvas": "^3.2.3",
     "vite": "^6.3.2",
     "vitest": "^3.1.1",
     "wabt": "^1.0.36"
