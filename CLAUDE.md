@@ -14,7 +14,7 @@ The game is auto-mode only — AI policies control the player, there is no manua
 - **Creatures**: Procedural creature rendering (`src/renderer/creatures/`) — archetypes, deformations, Canvas 2D drawing
 - **Skeletal Animation**: Custom 2D skeletal interpolation + skinned-mesh animation engine (`src/animation/`) — skeleton, pose, clip, sampler, blend, constraints, IK, mesh skinning, rig controller, runtime
 - **Content**: Data definitions (`src/content/`), rigged character data (`src/content/rigs/`, `src/content/animations/`)
-- **UI**: Menu (policy selector), DOM HUD, level-up, game-over, upgrade picker (`src/ui/`)
+- **UI**: Menu, DOM HUD, level-up, game-over, upgrade picker (`src/ui/`)
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
 - **Studio**: Offline creature preview/render tool (`studio/`) — browser-based rig inspector + Node.js PNG export
 
@@ -127,15 +127,15 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 
 ## AI / Policy System
 
-- **Auto-mode only** — AI policies control the player, no manual play mode
-- **Policies** produce actions (dx, dy, attack, target) from observations each tick
+- **Auto-mode only** — AI brawler policy controls the player, no manual play or policy selection in UI
+- **Default policy: brawler** — aggressive, dives into clusters, highest scoring in batch sim
+- **Policy** produces actions (dx, dy, attack, target) from observations each tick
 - **Observations** built from engine state: spatial sectors, threat density, safest escape vector (`safestDirX/Y`), weapon readiness (`weaponReady`, `weaponRange`, `enemiesInArc`)
-- **Intelligent attacks** — policies only swing when enemies are in range and weapon is ready, not always-attack
-- **Upgrade strategies** are separate from movement policies
+- **Intelligent attacks** — policy only swings when enemies are in range and weapon is ready, not always-attack
+- **Upgrade strategy** is separate from movement policy
 - **Scoring** is centralized in `src/ai/scoring.js`
 - **Evolution** tunes policy parameters via `src/ai/evolution.js`
-- Legacy policies: `survival` (kiting/safety), `progression` (XP farming)
-- Utility policies: `coward`, `kiter`, `brawler`, `farmer` — weight profiles over shared utility system
+- Other policies (survival, progression, coward, kiter, farmer) still exist for batch sim/evolve harnesses but are not used in-game
 - Policy input flows through `input.setOverride()` → same `setPlayerInput()` path
 
 | Layer | Reads | Writes | Never touches |

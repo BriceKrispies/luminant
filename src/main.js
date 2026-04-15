@@ -157,8 +157,8 @@ async function main() {
   };
 
   // ── Step 2: Menu — wait for user to start ──
-  menuUI.onStart((mode, policyId) => {
-    startGame(policyId);
+  menuUI.onStart(() => {
+    startGame();
   });
 
   // ── Game-over restarts via menu ──
@@ -198,7 +198,7 @@ async function main() {
     appState.setScreen(AppState.MENU);
   }
 
-  function startGame(policyId) {
+  function startGame() {
     gameOver = false;
     playing = true;
     adrenalineActive = false;
@@ -218,7 +218,7 @@ async function main() {
     clock.start();
 
     autoPlayer.enabled = true;
-    autoPlayer.setPolicy(policyId || 'survival');
+    autoPlayer.setPolicy('brawler');
     autoPlayer.reset();
     input.setOverride(null);
     upgradePicker.reset();

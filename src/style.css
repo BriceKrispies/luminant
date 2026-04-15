@@ -120,27 +120,6 @@ html, body {
   gap: 0.4rem;
 }
 
-.policy-select {
-  background: rgba(200, 140, 40, 0.15);
-  border: 1px solid rgba(255, 200, 80, 0.3);
-  border-radius: 4px;
-  color: #ffd080;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  padding: 4px 12px;
-  text-transform: uppercase;
-  cursor: pointer;
-  pointer-events: all;
-}
-.policy-select:focus {
-  outline: none;
-  border-color: rgba(255, 200, 80, 0.6);
-}
-.policy-select option {
-  background: #1a1a2e;
-  color: #ffd080;
-}
 
 .menu-hint {
   margin-top: 2rem;

@@ -5,19 +5,12 @@
  */
 
 import { AppState } from './state.js';
-import { listPolicies } from '../ai/policy-types.js';
 
-// Ensure policies are registered
-import '../ai/policies/survival.js';
-import '../ai/policies/progression.js';
-import '../systems/player-ai/policies/coward.js';
-import '../systems/player-ai/policies/kiter.js';
+// Ensure brawler policy is registered
 import '../systems/player-ai/policies/brawler.js';
-import '../systems/player-ai/policies/farmer.js';
 
 export function createMenuUI(container, appState) {
   let onStart = null;
-  let selectedPolicy = 'survival';
 
   function render() {
     const screen = appState.screen;
@@ -32,19 +25,13 @@ export function createMenuUI(container, appState) {
   }
 
   function buildHTML(showResume) {
-    const policies = listPolicies();
-    const policyOptions = policies.map(p =>
-      `<option value="${p}" ${p === selectedPolicy ? 'selected' : ''}>${p}</option>`
-    ).join('');
-
     return `
       <div class="menu-content">
         <h1 class="menu-title">LUMINANT</h1>
         <p class="menu-subtitle">Survive the swarm</p>
         <div class="menu-buttons">
           ${showResume ? '<button class="glow-btn menu-btn" data-action="resume">RESUME</button>' : ''}
-          <button class="glow-btn menu-btn" data-action="auto">START</button>
-          <select class="policy-select" id="policy-select">${policyOptions}</select>
+          <button class="glow-btn menu-btn" data-action="start">START</button>
         </div>
         <div class="menu-hint">
           <p>F3: debug overlay &middot; F4: toggle renderer</p>
@@ -54,19 +41,12 @@ export function createMenuUI(container, appState) {
   }
 
   function bind() {
-    const policySelect = container.querySelector('#policy-select');
-    if (policySelect) {
-      policySelect.addEventListener('change', (e) => {
-        selectedPolicy = e.target.value;
-      });
-    }
-
     container.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const action = e.currentTarget.dataset.action;
-        if (action === 'auto') {
+        if (action === 'start') {
           appState.setScreen(AppState.PLAYING);
-          if (onStart) onStart(null, selectedPolicy);
+          if (onStart) onStart();
         } else if (action === 'resume') {
           appState.setScreen(AppState.PLAYING);
         }
@@ -82,6 +62,5 @@ export function createMenuUI(container, appState) {
 
   return {
     onStart(fn) { onStart = fn; },
-    get selectedPolicy() { return selectedPolicy; },
   };
 }
