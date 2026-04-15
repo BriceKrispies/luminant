@@ -1,8 +1,9 @@
 import { createObservationBuilder } from '../ai/observations.js';
 import { createPolicy, listPolicies } from '../ai/policy-types.js';
 
-// Register brawler policy (default and only in-game policy)
+// Register policies
 import './player-ai/policies/brawler.js';
+import '../ai/neural/neural-policy.js';
 
 export function createPlayerAISystem(engine) {
   let enabled = false;

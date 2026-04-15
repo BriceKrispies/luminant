@@ -21,7 +21,20 @@
       "Bash(node studio/render.js ghost --size=512 --zoom=8 --time=0)",
       "Bash(node studio/render.js ghost --size=512)",
       "WebSearch",
-      "Bash(node scripts/convert-svg.js docs/characters/char_01.svg ghost)"
+      "Bash(node scripts/convert-svg.js docs/characters/char_01.svg ghost)",
+      "Bash(node scripts/build-wat.js)",
+      "Bash(node harness/neuroevolve.js --pop=4 --gens=2 --runs=1 --maxTicks=1800 --seed=42)",
+      "Bash(node harness/batch-sim.js --policy=neural --runs=2 --maxTicks=3000)",
+      "Bash(timeout 120 node harness/neuroevolve.js --pop=200 --gens=1000 --runs=5 --maxTicks=50000 --seed=42 --mutRate=0.08 --mutScale=0.25)",
+      "Bash(timeout 120 node harness/neuroevolve.js --pop=50 --gens=1000 --runs=3 --maxTicks=30000 --seed=42)",
+      "Bash(nohup node *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(node harness/batch-sim.js --policy=neural --runs=10 --maxTicks=30000 --seed=100)",
+      "Bash(node harness/batch-sim.js --policy=brawler --runs=10 --maxTicks=30000 --seed=100)",
+      "Bash(node -e ' *)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(kill 4959)",
+      "Bash(kill 5773)"
     ]
   }
 }

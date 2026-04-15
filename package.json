@@ -15,6 +15,7 @@
     "sim": "node scripts/build-wat.js && node harness/batch-sim.js --runs=1",
     "batch": "node scripts/build-wat.js && node harness/batch-sim.js",
     "evolve": "node scripts/build-wat.js && node harness/evolve.js",
+    "train": "node scripts/build-wat.js && node harness/neuroevolve.js",
     "debug": "node scripts/build-wat.js && vite --open /debug/",
     "studio": "vite --open /studio/",
     "render": "node studio/render.js"

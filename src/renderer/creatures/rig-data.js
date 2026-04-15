@@ -84,6 +84,18 @@ export const SKELETON_DEFS = {
     { name: 'weapon_anchor', parent: 'right_arm', x: 0.15, y: 0, tags: 'anchor' },
     { name: 'fx_anchor', parent: 'body', x: 0, y: -0.4, tags: 'anchor,fx' },
   ],
+
+  player: [
+    { name: 'root', parent: null, x: 0, y: 0 },
+    { name: 'body', parent: 'root', x: 0, y: 0, tags: 'body' },
+    { name: 'chest', parent: 'body', x: 0, y: -0.15, tags: 'body' },
+    { name: 'head', parent: 'chest', x: 0, y: -0.25, tags: 'face' },
+    { name: 'face_anchor', parent: 'head', x: 0, y: 0, tags: 'face,anchor' },
+    { name: 'left_arm', parent: 'chest', x: -0.35, y: 0.05, tags: 'limb' },
+    { name: 'right_arm', parent: 'chest', x: 0.35, y: 0.05, tags: 'limb' },
+    { name: 'weapon_anchor', parent: 'right_arm', x: 0.2, y: 0, tags: 'anchor' },
+    { name: 'fx_anchor', parent: 'body', x: 0, y: -0.5, tags: 'anchor,fx' },
+  ],
 };
 
 // ── Slot definitions ──
@@ -193,6 +205,33 @@ export const SLOT_DEFS = {
       attachment.eye('dot', { side: 'right', size: 0.18, offset: 0.3, spread: 0.5 }),
     ]},
   ],
+
+  player: [
+    { name: 'body_glow', bone: 'body', drawOrder: -10, attachments: [
+      attachment.accent('glow', { radius: 2.5 }),
+    ]},
+    { name: 'body_shape', bone: 'body', drawOrder: 0, attachments: [
+      attachment.shape('hero_body', { segments: 10 }),
+    ]},
+    { name: 'interior', bone: 'body', drawOrder: 1, attachments: [
+      attachment.feature('dark_interior', { radius: 0.45 }),
+    ]},
+    { name: 'highlight', bone: 'chest', drawOrder: 2, attachments: [
+      attachment.feature('highlight', { radius: 0.2 }),
+    ]},
+    { name: 'left_arm', bone: 'left_arm', drawOrder: 3, attachments: [
+      attachment.shape('nub', { size: 0.18 }),
+    ]},
+    { name: 'right_arm', bone: 'right_arm', drawOrder: 3, attachments: [
+      attachment.shape('nub', { size: 0.18 }),
+    ]},
+    { name: 'eye_left', bone: 'face_anchor', drawOrder: 10, attachments: [
+      attachment.eye('dot', { side: 'left', size: 0.14, offset: 0.25, spread: 0.4 }),
+    ]},
+    { name: 'eye_right', bone: 'face_anchor', drawOrder: 10, attachments: [
+      attachment.eye('dot', { side: 'right', size: 0.14, offset: 0.25, spread: 0.4 }),
+    ]},
+  ],
 };
 
 // ── Animation clip definitions ──
@@ -204,6 +243,7 @@ function makeClips(archetypeId) {
     ember: { idleSway: 0.04, moveStretch: 0.1, attackReach: 0.25, hitRecoil: 0.2, deathDur: 0.35 },
     brute: { idleSway: 0.02, moveStretch: 0.04, attackReach: 0.4, hitRecoil: 0.08, deathDur: 0.6 },
     slime: { idleSway: 0.08, moveStretch: 0.12, attackReach: 0.2, hitRecoil: 0.15, deathDur: 0.4 },
+    player: { idleSway: 0.03, moveStretch: 0.06, attackReach: 0.35, hitRecoil: 0.12, deathDur: 0.5 },
   };
   const c = configs[archetypeId] || configs.slime;
 
@@ -282,6 +322,7 @@ export const CLIP_DEFS = {
   ember: makeClips('ember'),
   brute: makeClips('brute'),
   slime: makeClips('slime'),
+  player: makeClips('player'),
 };
 
 // ── Animation state configs ──
@@ -432,6 +473,40 @@ export const EXPRESSION_PROFILES = {
     },
     blinkConfig: { interval: [2, 4], duration: 0.1 },
   },
+
+  player: {
+    expressions: {
+      neutral: {
+        eyeParams: { openness: 1.0, size: 1.0 },
+        browParams: {},
+      },
+      angry: {
+        eyeParams: { openness: 0.85, size: 0.95 },
+        browParams: {},
+        blendSpeed: 8,
+      },
+      surprised: {
+        eyeParams: { openness: 1.3, size: 1.1 },
+        browParams: {},
+        blendSpeed: 10,
+      },
+      hurt: {
+        eyeParams: { openness: 0.4, size: 0.8 },
+        browParams: {},
+        blendSpeed: 12,
+      },
+      dead: {
+        eyeParams: { openness: 0, size: 0 },
+        browParams: {},
+        blendSpeed: 3,
+      },
+      focused: {
+        eyeParams: { openness: 0.95, size: 1.0 },
+        browParams: {},
+      },
+    },
+    blinkConfig: { interval: [3, 5], duration: 0.12 },
+  },
 };
 
 // ── Overlay configurations per archetype ──
@@ -458,5 +533,10 @@ export const OVERLAY_CONFIGS = {
     breathing: { amp: 0.04, freq: 1.0, bones: ['body'] },
     recoil: { magnitude: 3.5 },
     head_look: { maxAngle: 0.3 },
+  },
+  player: {
+    breathing: { amp: 0.03, freq: 1.0, bones: ['body', 'chest'] },
+    recoil: { magnitude: 2.5 },
+    head_look: { maxAngle: 0.2 },
   },
 };

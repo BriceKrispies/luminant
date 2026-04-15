@@ -18,7 +18,7 @@ import { composeDeformations } from '../src/renderer/creatures/deformations.js';
 import { SKELETON_DEFS, SLOT_DEFS, CLIP_DEFS, STATE_CONFIGS, EXPRESSION_PROFILES, OVERLAY_CONFIGS } from '../src/renderer/creatures/rig-data.js';
 
 // Reverse map: archetype ID → entity type constant
-const ARCHETYPE_TO_TYPE = { slime: 2, ghost: 3, brute: 4, ember: 5 };
+const ARCHETYPE_TO_TYPE = { player: 1, slime: 2, ghost: 3, brute: 4, ember: 5 };
 
 /**
  * Create a synthetic entity for studio use. No WASM needed.

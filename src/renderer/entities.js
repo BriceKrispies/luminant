@@ -7,9 +7,8 @@ import { TYPE, STATE } from '../engine/bindings.js';
 import { ENEMY_DEFS, TYPE_TO_KEY } from '../content/enemy-types.js';
 import { WEAPON_DEFS } from '../content/weapon-types.js';
 import { createCreatureResolver } from './creatures/creature-model.js';
-import { drawCreature } from './creatures/draw-canvas.js';
+import { drawCreaturePixel as drawCreature } from './creatures/draw-pixel.js';
 import { getArchetype } from './creatures/archetypes.js';
-import { isSkinnedEntity, drawSkinnedEntity, resetSkinnedCache } from './skinned-entities.js';
 
 // Shared creature resolver for Canvas 2D renderer
 let creatureResolver = null;
@@ -52,17 +51,13 @@ export function drawEntities(ctx, snapshot, camera) {
   // Draw pickups
   for (const p of pickups) drawPickup(ctx, p, snapshot.time);
 
-  // Draw enemies — skinned > creature system > legacy fallback
+  // Draw enemies — creature system > legacy fallback
   for (const e of enemies) {
-    if (isSkinnedEntity(e)) {
-      drawSkinnedEntity(ctx, e, Math.max(dt, 1 / 60), snapshot.time);
+    const model = resolver.resolve(e, snapshot.time, Math.max(dt, 1 / 60));
+    if (model) {
+      drawCreature(ctx, model);
     } else {
-      const model = resolver.resolve(e, snapshot.time, Math.max(dt, 1 / 60));
-      if (model) {
-        drawCreature(ctx, model);
-      } else {
-        drawEnemy(ctx, e);
-      }
+      drawEnemy(ctx, e);
     }
   }
 
@@ -70,7 +65,14 @@ export function drawEntities(ctx, snapshot, camera) {
   for (const p of projectiles) drawProjectile(ctx, p);
 
   // Draw player on top
-  if (player) drawPlayer(ctx, player, snapshot.time);
+  if (player) {
+    const model = resolver.resolve(player, snapshot.time, Math.max(dt, 1 / 60));
+    if (model) {
+      drawCreature(ctx, model);
+    } else {
+      drawPlayer(ctx, player, snapshot.time);
+    }
+  }
 }
 
 function drawPlayer(ctx, e, time) {

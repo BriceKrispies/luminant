@@ -6,8 +6,9 @@
  * propagate via Vite HMR.
  */
 
-import { drawCreature } from '../src/renderer/creatures/draw-canvas.js';
+import { drawCreaturePixel as drawCreature } from '../src/renderer/creatures/draw-pixel.js';
 import { POSE_STRIDE, PX, PY, PROT, PSX, PSY } from '../src/renderer/creatures/skeleton.js';
+import { ARCHETYPES } from '../src/renderer/creatures/archetypes.js';
 import { createStudioRig, createSyntheticEntity } from './studio-rig.js';
 
 // ── State ──
@@ -44,7 +45,7 @@ let oneShotPlaying = false;
 
 // All-mode rigs
 let allRigs = {};
-const ALL_ARCHETYPES = ['slime', 'ghost', 'ember', 'brute'];
+const ALL_ARCHETYPES = Object.keys(ARCHETYPES);
 
 // ── Canvas ──
 
@@ -110,6 +111,18 @@ function applyAnimState() {
   } else {
     pendingOneShot = null;
     oneShotPlaying = false;
+  }
+}
+
+// Populate archetype buttons from ARCHETYPES
+{
+  const container = document.getElementById('archetype-btns');
+  for (const id of ALL_ARCHETYPES) {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (id === state.archetypeId ? ' active' : '');
+    btn.dataset.id = id;
+    btn.textContent = ARCHETYPES[id].name;
+    container.appendChild(btn);
   }
 }
 
@@ -190,8 +203,9 @@ function renderSingle(w, h, dt) {
 function renderAllArchetypes(w, h, dt) {
   if (Object.keys(allRigs).length === 0) rebuildAllRigs();
 
-  const cols = 2;
-  const rows = 2;
+  const count = ALL_ARCHETYPES.length;
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
   const cellW = w / cols;
   const cellH = h / rows;
   const zoom = Math.min(cellW, cellH) / (state.radius * 12) * devicePixelRatio;
@@ -457,7 +471,7 @@ wireCheckbox('show-all', 'showAll', (v) => {
 
 if (import.meta.hot) {
   import.meta.hot.accept([
-    '../src/renderer/creatures/draw-canvas.js',
+    '../src/renderer/creatures/draw-pixel.js',
     '../src/renderer/creatures/rig-data.js',
     '../src/renderer/creatures/archetypes.js',
     '../src/renderer/creatures/skeleton.js',

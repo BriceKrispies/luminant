@@ -130,11 +130,12 @@ async function main() {
   const clock = createClock(1 / 60);
   const player = createPlayerSystem(engine);
   const spawner = createSpawnerSystem(engine);
-  const camera = createCameraSystem(
-    canvas.getBoundingClientRect().width,
-    canvas.getBoundingClientRect().height,
-    WORLD_W, WORLD_H
-  );
+  // Camera uses the renderer's low-res render dimensions so the view area
+  // matches the pixel art resolution (entities appear larger and chunky).
+  const r = rendererManager.renderer;
+  const camW = (r && r.renderWidth) || canvas.getBoundingClientRect().width;
+  const camH = (r && r.renderHeight) || canvas.getBoundingClientRect().height;
+  const camera = createCameraSystem(camW, camH, WORLD_W, WORLD_H);
   const feedback = createFeedbackSystem(engine, { camera, clock });
   const weapons = createWeaponSystem(engine, { feedback });
   const xpSystem = createXPSystem(engine, { feedback });
@@ -218,7 +219,7 @@ async function main() {
     clock.start();
 
     autoPlayer.enabled = true;
-    autoPlayer.setPolicy('brawler');
+    autoPlayer.setPolicy('neural');
     autoPlayer.reset();
     input.setOverride(null);
     upgradePicker.reset();
@@ -444,11 +445,17 @@ async function main() {
   // ── Resize ──
   window.addEventListener('resize', () => {
     rendererManager.resize();
-    const c = rendererManager.canvas;
-    camera.resize(
-      c.getBoundingClientRect().width,
-      c.getBoundingClientRect().height
-    );
+    // Use render resolution for camera so view area matches pixel art scale
+    const rr = rendererManager.renderer;
+    if (rr && rr.renderWidth) {
+      camera.resize(rr.renderWidth, rr.renderHeight);
+    } else {
+      const c = rendererManager.canvas;
+      camera.resize(
+        c.getBoundingClientRect().width,
+        c.getBoundingClientRect().height
+      );
+    }
   });
 
   requestAnimationFrame(loop);

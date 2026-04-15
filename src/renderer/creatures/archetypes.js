@@ -145,6 +145,45 @@ export const ARCHETYPES = {
     },
   },
 
+  player: {
+    id: 'player',
+    name: 'Player',
+    skeletonId: 'player',
+    secondaryId: null,
+    expressionId: 'player',
+    body: {
+      shape: 'hero',
+      aspectRatio: 0.9,
+      segments: 10,
+    },
+    eyes: {
+      count: 2,
+      size: 0.14,
+      offset: 0.25,
+      spread: 0.4,
+      style: 'dot',
+    },
+    palette: {
+      base: [0.95, 0.82, 0.45],       // golden
+      highlight: [1.0, 0.95, 0.7],    // bright gold
+      glow: [1.0, 0.85, 0.4, 0.4],   // warm glow
+      eye: [0.15, 0.12, 0.08],       // dark eyes
+      interior: [0.75, 0.55, 0.25],   // deeper gold
+    },
+    deform: {
+      wobble: { amp: 0.04, freq: 2.0, octaves: 1 },
+      breathing: { amp: 0.04, freq: 1.0 },
+      squashStretch: { moveFactor: 0.1 },
+      hit: { flashDuration: 0.15, scalePulse: 0.15 },
+      death: { type: 'fade', duration: 0.5 },
+    },
+    variation: {
+      hueShift: [0, 0],
+      scaleJitter: [1, 1],
+      wobblePhase: [0, 6.28],
+    },
+  },
+
   brute: {
     id: 'brute',
     name: 'Brute',
@@ -191,6 +230,7 @@ export const ARCHETYPES = {
 // ── Entity type → archetype mapping ──
 
 export const TYPE_TO_ARCHETYPE = {
+  [TYPE.PLAYER]: 'player',
   [TYPE.ENEMY_BASIC]: 'slime',
   [TYPE.ENEMY_FAST]: 'ghost',
   [TYPE.ENEMY_TANK]: 'brute',

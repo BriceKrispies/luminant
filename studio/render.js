@@ -19,7 +19,7 @@
 
 import { createCanvas } from 'canvas';
 import { createStudioRig, createSyntheticEntity } from './studio-rig.js';
-import { drawCreature } from '../src/renderer/creatures/draw-canvas.js';
+import { drawCreaturePixel as drawCreature } from '../src/renderer/creatures/draw-pixel.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 

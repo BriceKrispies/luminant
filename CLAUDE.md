@@ -103,6 +103,7 @@ npm run headless     # Run headless simulation (--enemies=N --ticks=N)
 npm run sim          # Single headless AI game (--policy=survival --maxTicks=30000)
 npm run batch        # Batch simulation (--runs=10 --policy=survival --seed=N)
 npm run evolve       # Evolution search (--policy=survival --pop=8 --gens=5)
+npm run train        # Neuroevolution training (--pop=50 --gens=100 --runs=3)
 npm run build:wat    # Compile engine/core.wat → public/core.wasm
 npm run studio       # Open creature studio in browser
 npm run render       # Render creature PNGs via Node.js (uses canvas package)
@@ -153,6 +154,18 @@ New policies are weight profiles via `createUtilityPolicy()`. See `docs/extendin
 
 Debug overlay (`F3`) shows utility AI state: current intention, danger/encirclement levels, intention scores, and top candidate moves.
 
+### Neural Policy (`src/ai/neural/`)
+
+Neuroevolution-trained feedforward network as a drop-in policy replacement.
+
+- **`feedforward.js`** — Pure JS `FeedforwardNetwork` class: arbitrary topology, ReLU hidden layers, raw output, flat weight get/set, JSON serialization
+- **`encode.js`** — Encodes sensor-enriched observation into 53 normalized floats for network input
+- **`neural-policy.js`** — Policy wrapper registered as `'neural'`. Uses sensors for observation enrichment, brawler's upgrade strategy for level-ups. Output mapping: tanh for dx/dy, sigmoid for attack, tanh*PI for aim offset
+- **`trained-weights.json`** — Serialized best network from training (topology + flat weights + fitness history)
+- **Training**: `npm run train` runs `harness/neuroevolve.js` with worker pool (`harness/neuro-worker.js`). Population-based search: gaussian mutation, no crossover, elite selection, periodic random injection. Checkpoints every 10 gens to `results/`.
+- **Topology**: [53, 32, 16, 4] = 2,324 parameters. 53 inputs from sensor layer, 4 raw outputs mapped to actions.
+- **To use in-game**: Change `main.js` `setPolicy('brawler')` to `setPolicy('neural')` after training
+
 ## PWA / Service Worker
 
 - Service worker (`public/sw.js`) uses build-hash cache busting (injected by Vite plugin at build time)
@@ -198,6 +211,9 @@ across wraparound, 2-pose blending, masked blending, additive layers, 2-bone IK 
 mesh skinning (single bone, multi-bone, with rotation), aim constraint, trail constraint,
 rig controller state machine (spawn→idle→chase→hit→death), clip determinism,
 ghost witch rig integrity (bone references, skinning output).
+Neural network: feedforward weight count, get/set roundtrip, forward pass determinism,
+ReLU hidden activation, JSON serialization, observation encoding (length, normalization,
+buffer reuse, missing fields), neural policy interface (registration, act shape, custom weights).
 
 ## Maintenance Rule
 

@@ -18,7 +18,7 @@ import { TYPE, STATE } from '../engine/bindings.js';
 import { ENEMY_DEFS, TYPE_TO_KEY } from '../content/enemy-types.js';
 import { drawEffects } from './effects.js';
 import { createCreatureResolver } from './creatures/creature-model.js';
-import { drawCreature } from './creatures/draw-canvas.js';
+import { drawCreaturePixel as drawCreature } from './creatures/draw-pixel.js';
 import { getArchetype } from './creatures/archetypes.js';
 
 // ── Shader source (WGSL) ──

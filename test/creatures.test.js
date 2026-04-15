@@ -51,8 +51,13 @@ describe('Creature archetypes', () => {
     expect(getArchetype(TYPE.ENEMY_TANK).id).toBe('brute');
   });
 
-  it('getArchetype returns null for non-enemy types', () => {
-    expect(getArchetype(TYPE.PLAYER)).toBeNull();
+  it('getArchetype returns player archetype for PLAYER type', () => {
+    const arch = getArchetype(TYPE.PLAYER);
+    expect(arch).not.toBeNull();
+    expect(arch.id).toBe('player');
+  });
+
+  it('getArchetype returns null for non-creature types', () => {
     expect(getArchetype(TYPE.PROJECTILE_BULLET)).toBeNull();
     expect(getArchetype(TYPE.PICKUP_XP)).toBeNull();
   });
@@ -302,10 +307,14 @@ describe('Creature model resolver', () => {
     expect(model.variation).toBeDefined();
   });
 
-  it('returns null for non-enemy types', () => {
+  it('resolves player type to player archetype', () => {
     const player = makeEntity({ type: TYPE.PLAYER });
-    expect(resolver.resolve(player, 1.0, 1 / 60)).toBeNull();
+    const model = resolver.resolve(player, 1.0, 1 / 60);
+    expect(model).not.toBeNull();
+    expect(model.archetype.id).toBe('player');
+  });
 
+  it('returns null for non-creature types', () => {
     const proj = makeEntity({ type: TYPE.PROJECTILE_BULLET });
     expect(resolver.resolve(proj, 1.0, 1 / 60)).toBeNull();
   });
