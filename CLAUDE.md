@@ -16,6 +16,8 @@ The game is auto-mode only — AI policies control the player, there is no manua
 - **Content**: Data definitions (`src/content/`), rigged character data (`src/content/rigs/`, `src/content/animations/`)
 - **UI**: Menu, DOM HUD, level-up, game-over, upgrade picker (`src/ui/`)
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
+- **Simulation Lab**: Offline bot experimentation, reward shaping, lineage tracking, replay, upgrade analytics (`src/lab/`, `harness/simulation-lab.js`, `debug/simulation-lab.html`)
+- **Experiment Lab**: Structured experiment/training architecture — featurizer, moments, trajectories, evolutionary training, population analysis (`src/lab/`, `harness/experiment.js`, `debug/experiment-lab.html`)
 - **Studio**: Offline creature preview/render tool (`studio/`) — browser-based rig inspector + Node.js PNG export
 
 Engine owns entity data. Renderer reads snapshots. JS handles game rules.
@@ -30,6 +32,7 @@ See `docs/architecture.md` for full layout.
 | Engine Bindings | WASM memory | WASM memory (via exports) | DOM, canvas |
 | Game Systems | Engine bindings | Engine bindings | Canvas, DOM (except UI) |
 | Renderer | Snapshots, camera | Canvas pixels | Engine memory |
+| Simulation Lab | Game-runner results, artifacts | JSON artifacts, analytics | Engine memory, DOM, Canvas |
 
 ## WAT ↔ JS Interface
 
@@ -107,6 +110,18 @@ npm run train        # Neuroevolution training (--pop=50 --gens=100 --runs=3)
 npm run build:wat    # Compile engine/core.wat → public/core.wasm
 npm run studio       # Open creature studio in browser
 npm run render       # Render creature PNGs via Node.js (uses canvas package)
+npm run lab          # Simulation Lab batch (alias for lab:batch)
+npm run lab:batch    # Lab batch simulation (--runs=N --bias=NAME --mutate)
+npm run lab:evolve   # Lab evolutionary search (--pop=N --gens=N --bias=NAME)
+npm run lab:replay   # Replay stored run (--artifact=PATH --forced)
+npm run lab:analytics # Aggregate analytics from stored artifacts
+npm run lab:ui       # Open Simulation Lab debug UI in browser
+npm run experiment   # Run experiment (--name=NAME --pop=N --gens=N --runs=N)
+npm run experiment:run      # Run experiment from config (--config=PATH)
+npm run experiment:evaluate # Evaluate single config across seeds
+npm run experiment:analyze  # Population analysis on experiment artifacts
+npm run experiment:compare  # Compare generation winners
+npm run experiment:ui       # Open Experiment Lab UI in browser
 ```
 
 ## HUD
@@ -166,6 +181,70 @@ Neuroevolution-trained feedforward network as a drop-in policy replacement.
 - **Topology**: [53, 32, 16, 4] = 2,324 parameters. 53 inputs from sensor layer, 4 raw outputs mapped to actions.
 - **To use in-game**: Change `main.js` `setPolicy('brawler')` to `setPolicy('neural')` after training
 
+## Simulation Lab (`src/lab/`)
+
+Offline bot experimentation subsystem. Sits around the existing headless simulation path — does not replace it. No DOM or Canvas dependency.
+
+**Core modules:**
+- `bot.js` — Configurable bot policies with 6 named bias presets (survival, xp_collection, keep_distance, aoe_opportunity, elite_targeting, low_hp_caution). Mutation for evolutionary search. Serializable configs.
+- `rewards.js` — Structured per-component reward breakdown: survival, kills, elite kills, XP, damage penalty, wasted upgrades, crowd control, consistency. Separate from scoring.js.
+- `run-recorder.js` — Compact run artifacts: runId, parentRunId, generation, seed, bot config, upgrade choices, events, snapshots, summary, reward breakdown. All JSON-serializable.
+- `lineage.js` — Ancestry tree: parent/child tracking, generation filtering, best-per-generation, serialize/load.
+- `replay.js` — Re-run from seed + bot config. Verification against original. Forced-upgrade replay. Side-by-side comparison.
+- `analytics.js` — Aggregate upgrade analytics: best by reward, strongest first pick, pairings, by wave, by policy archetype, pick rate vs success, dead picks. JSON + text output.
+- `lab-runner.js` — Orchestrator: single sim, batch, evolutionary modes. Wires recorder + rewards + lineage.
+
+**Harness:** `harness/simulation-lab.js` — CLI with commands: `batch`, `evolve`, `replay`, `compare`, `analytics`. Output to `results/lab/`.
+
+**Debug UI:** `debug/simulation-lab.html` — browser lab surface. Load JSONL artifacts, view summaries, rewards, lineage trees, analytics, comparisons. Isolated from main game.
+
+**Determinism:** Seed-deterministic replay. Same seed + same bot config + same code → same result. Known gap: no code versioning between record and replay.
+
+| Layer | Reads | Writes | Never touches |
+|-------|-------|--------|---------------|
+| Simulation Lab | Game-runner results, artifacts | JSON artifacts, analytics | Engine memory, DOM, Canvas |
+
+## Experiment / Training Architecture (`src/lab/`)
+
+Structured experiment and evolutionary training platform built on the Simulation Lab.
+
+### Core Components
+
+- **`featurizer.js`** — Normalized feature extraction from observations. Schema-versioned. Groups: health, enemies, sectorDensity, sectorThreat, spatial, dirDanger, dirReward, weapon, pickups, progression, clusters, boss, movement. Reuses Float64Array buffer.
+- **`moments.js`** — Gameplay moment detection system. 9 built-in moments: aoe_setup_success, clutch_escape, overcommit_punished, elite_focus_success, pickup_greed_punished, kiting_success, pressure_survived, dead_upgrade_pick, synergy_completed. Cooldowns, weight overrides, pluggable registration.
+- **`trajectory.js`** — Per-run trajectory recording. Detail levels: summary, moments, sampled, full. Records tick-indexed features, actions, moments, upgrades, periodic summaries. JSON-serializable.
+- **`experiment.js`** — Experiment config schema, validation, generation/experiment artifact constructors, seed strategies (sequential/fixed/random).
+- **`training.js`** — Evolutionary training backend. Population initialization, evaluation, elite selection + mutation, random injection, per-generation artifacts.
+- **`experiment-runner.js`** — Top-level orchestrator wiring config → training → game-runner → artifacts. Also `evaluateConfig()` for one-off evaluation.
+- **`population-analysis.js`** — Parameter-reward correlation (Pearson), moment correlation, upgrade correlation, candidate dominance across seeds, convergence/stagnation/overfit detection.
+
+### Enhancements to Existing Lab
+
+- **`rewards.js`** — Added `moments` reward component. `computeRewardBreakdown()` accepts optional `{ moments, momentRewardScale }`.
+- **`replay.js`** — Added `compareParentChild()` (config diff) and `compareGenerationWinners()` (cross-generation trend).
+
+### Harness & UI
+
+- **`harness/experiment.js`** — CLI: run, evaluate, analyze, compare commands.
+- **`debug/experiment-lab.html`** — Browser UI: overview, generations, candidates, moments, convergence, compare tabs. Load JSONL artifacts.
+
+### Data Flow
+
+```
+1. Experiment config → training backend → population of bot configs
+2. Per candidate: bot config → createBotPolicy → game-runner → result
+3. Featurizer extracts normalized features, moments detected
+4. Trajectory records obs/action/moment stream
+5. Rewards computed (including moment component)
+6. Population evaluated → generation artifact
+7. Selection + mutation → next generation
+8. After all generations: experiment summary + population analysis
+```
+
+| Layer | Reads | Writes | Never touches |
+|-------|-------|--------|---------------|
+| Experiment | Game-runner results, bot configs | JSON artifacts, analysis | Engine memory, DOM, Canvas |
+
 ## PWA / Service Worker
 
 - Service worker (`public/sw.js`) uses build-hash cache busting (injected by Vite plugin at build time)
@@ -184,6 +263,13 @@ Neuroevolution-trained feedforward network as a drop-in policy replacement.
 - New policy: create in `src/ai/policies/`, call `registerPolicy()`, see `docs/extending.md`
 - New renderer backend: implement interface, register in manager, see `docs/extending.md`
 - WAT changes: edit `engine/core.wat`, run `npm run build:wat`, run `npm test`
+- New lab reward component: add weight + computation in `src/lab/rewards.js`
+- New lab bias preset: add to `BIAS_PRESETS` in `src/lab/bot.js`
+- New lab analytics metric: add function in `src/lab/analytics.js`, include in `analyzeUpgrades()` return
+- New lab UI panel: add tab in `debug/simulation-lab.html`
+- New experiment moment: add MomentDef to `MOMENT_DEFS` in `src/lab/moments.js` or use `registerMoment()`
+- New experiment feature group: add to `FEATURE_GROUPS` in `src/lab/featurizer.js`, bump `FEATURE_SCHEMA_VERSION`
+- New experiment UI panel: add tab in `debug/experiment-lab.html`
 - See `docs/extending.md` for detailed instructions
 
 ## Test Coverage
@@ -214,6 +300,25 @@ ghost witch rig integrity (bone references, skinning output).
 Neural network: feedforward weight count, get/set roundtrip, forward pass determinism,
 ReLU hidden activation, JSON serialization, observation encoding (length, normalization,
 buffer reuse, missing fields), neural policy interface (registration, act shape, custom weights).
+Simulation Lab: bot config creation, bias presets, multiple bias layering, direct overrides,
+policy creation from config, serialize/deserialize round-trip, mutation without parent corruption,
+deterministic mutation via RNG, range clamping, reward breakdown structure and totals,
+damage penalty sign, run recorder IDs/upgrades/events/serialization, lineage parent/child
+tracking, ancestry chains, generation filtering, best-per-generation, serialize/load round-trip,
+upgrade analytics (by reward, first pick, pairings, dead picks, formatting, empty report),
+replay verification (match/diverge detection), run comparison, lab runner integration (single sim
+artifact, batch artifacts + analytics, mutation variation, deterministic replay from seed).
+Experiment Lab: featurizer schema version/count/labels/groups, normalized feature extraction,
+buffer reuse, extractArray serialization, moment definitions/registry/detection, cooldown
+enforcement, upgrade-aware moments (dead pick, synergy), weight overrides, moment reward
+computation, moment summarization, custom moment registration, detector reset, trajectory
+recording (summary/moments/sampled/full detail levels), upgrade recording, trajectory stats,
+experiment config creation/validation, generation artifacts, experiment summaries, seed
+strategies (sequential/fixed), training population initialization/diversity, elite selection +
+mutation, population evaluation with mock, random injection, parameter-reward correlation,
+moment-reward correlation, upgrade-reward correlation, candidate dominance analysis,
+convergence/stagnation detection, full population analysis, parent-child comparison with config
+diff, generation winner comparison, rewards with moments component and scale factor.
 
 ## Maintenance Rule
 

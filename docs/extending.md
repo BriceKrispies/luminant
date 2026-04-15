@@ -347,3 +347,96 @@ npm run evolve -- --policy=survival --pop=8 --gens=5 --runs=3
 - **Batch runs**: `npm run batch -- --runs=50 --policy=progression`
 - **Evolution**: `npm run evolve -- --policy=survival --pop=8 --gens=5`
 - **Debug view**: `npm run debug` (opens browser debug page)
+
+## Simulation Lab
+
+The simulation lab (`src/lab/`) provides offline bot experimentation, reward
+analysis, lineage tracking, and upgrade analytics.
+
+### Running the Lab
+
+```bash
+# Batch simulation with default bot
+npm run lab:batch -- --runs=20 --seed=42
+
+# Batch with bias presets
+npm run lab:batch -- --runs=20 --bias=survival --bias=xp_collection
+
+# Batch with mutation (evolutionary drift)
+npm run lab:batch -- --runs=20 --bias=aoe_opportunity --mutate
+
+# Evolutionary search
+npm run lab:evolve -- --pop=8 --gens=5 --bias=elite_targeting
+
+# Replay a stored run artifact
+npm run lab:replay -- --artifact=results/lab/batch-2026-04-15T12-00-00.jsonl
+
+# Replay with forced original upgrade choices
+npm run lab:replay -- --artifact=results/lab/batch-2026-04-15T12-00-00.jsonl --forced
+
+# Generate analytics from all stored artifacts
+npm run lab:analytics
+
+# Open the lab debug UI in browser
+npm run lab:ui
+```
+
+### Available Bias Presets
+
+- `survival` — high flee/kite, low aggression, defensive upgrades
+- `xp_collection` — high pickup greed, reward-focused
+- `keep_distance` — kiting, long-range spacing
+- `aoe_opportunity` — cluster diving, AOE upgrades
+- `elite_targeting` — boss focus, damage upgrades
+- `low_hp_caution` — extra retreat, low risk tolerance
+
+Biases can be stacked: `--bias=survival --bias=xp_collection`
+
+### Adding a New Reward Component
+
+1. Add a weight key to `DEFAULT_REWARD_WEIGHTS` in `src/lab/rewards.js`
+2. Add computation logic in `computeRewardBreakdown()` — push a component
+   object with `{ name, raw, weight, contribution }`
+3. The component will automatically appear in analytics, the debug UI,
+   and artifact reward breakdowns
+4. Add a test in `test/simulation-lab.test.js`
+
+### Adding a New Bot Policy Signal
+
+1. Add a new bias preset to `BIAS_PRESETS` in `src/lab/bot.js` with the
+   weight overrides that emphasize the behavior
+2. Add a range entry to `WEIGHT_RANGES` if the new weight needs custom bounds
+3. The preset is immediately available via `--bias=your_name` in the CLI
+4. For new sensor signals, extend `sensors.js` per the utility AI section above
+
+### Adding a New Analytics Metric
+
+1. Add an analysis function in `src/lab/analytics.js`
+2. Include it in the `analyzeUpgrades()` return object
+3. Add display logic in `formatAnalyticsSummary()` for CLI output
+4. Add rendering in `debug/simulation-lab.html` for the browser view
+5. Add test coverage in `test/simulation-lab.test.js`
+
+### Adding a New Lab View/Panel
+
+1. Add a tab button and container div in `debug/simulation-lab.html`
+2. Add the tab name to the `switchTab()` function
+3. Write a render function that reads from the `artifacts` array
+4. The UI runs entirely in-browser — no server needed
+
+### Replay and Determinism
+
+Replay works by re-running a simulation with the same seed and bot config.
+The seeded PRNG replaces `Math.random` during simulation.
+
+**Deterministic guarantees:**
+- Same seed + same bot config + same game code → same simulation
+- Upgrade choices are deterministic given same observations + same weights
+
+**Known gaps:**
+- No game-code versioning — if you change game systems between record and
+  replay, results will diverge
+- Floating-point micro-divergence is possible on very long runs across
+  different platforms
+- Forced-upgrade replay (`replayWithForcedUpgrades`) provides tighter
+  reproduction by overriding `chooseUpgrade` with the stored sequence

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luminant — Simulation Lab</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #2a2a3a;
+      --text: #c8c8d8;
+      --text-dim: #7a7a8a;
+      --accent: #6a8cff;
+      --accent-dim: #3a5caa;
+      --good: #4aba5a;
+      --warn: #e8a840;
+      --bad: #d84848;
+      --font: 'Consolas', 'Monaco', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      font-size: 13px; line-height: 1.5;
+    }
+    .lab-header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 20px; display: flex; align-items: center; gap: 16px;
+    }
+    .lab-header h1 { font-size: 16px; color: var(--accent); }
+    .lab-header .info { color: var(--text-dim); font-size: 12px; }
+    .lab-content { display: flex; height: calc(100vh - 48px); }
+    .lab-sidebar {
+      width: 280px; min-width: 280px; background: var(--surface);
+      border-right: 1px solid var(--border); overflow-y: auto;
+    }
+    .lab-main { flex: 1; overflow-y: auto; padding: 16px; }
+    .section { margin-bottom: 16px; }
+    .section-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--border);
+    }
+    .run-item {
+      padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .run-item:hover { background: #1a1a2a; }
+    .run-item.selected { background: var(--accent-dim); }
+    .run-item .run-id { font-size: 11px; color: var(--accent); }
+    .run-item .run-stats { font-size: 11px; color: var(--text-dim); }
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; padding: 12px; margin-bottom: 12px;
+    }
+    .panel h3 { font-size: 13px; color: var(--accent); margin-bottom: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .stat { display: flex; justify-content: space-between; padding: 2px 0; }
+    .stat .label { color: var(--text-dim); }
+    .stat .value { color: var(--text); }
+    .reward-bar {
+      display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    }
+    .reward-bar .name { width: 120px; color: var(--text-dim); font-size: 11px; }
+    .reward-bar .bar {
+      flex: 1; height: 14px; background: #1a1a2a; border-radius: 2px;
+      overflow: hidden; position: relative;
+    }
+    .reward-bar .bar-fill {
+      height: 100%; border-radius: 2px; transition: width 0.3s;
+    }
+    .reward-bar .bar-fill.positive { background: var(--good); }
+    .reward-bar .bar-fill.negative { background: var(--bad); }
+    .reward-bar .val { width: 60px; text-align: right; font-size: 11px; }
+    .lineage-tree { font-size: 11px; }
+    .lineage-node { padding: 2px 0 2px 16px; border-left: 1px solid var(--border); }
+    .lineage-node.best { border-left-color: var(--good); }
+    .lineage-root { padding: 2px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: var(--text-dim); padding: 4px 8px; border-bottom: 1px solid var(--border); }
+    td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+    tr:hover td { background: #1a1a2a; }
+    .controls { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    button {
+      background: var(--accent-dim); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: 3px; cursor: pointer; font-family: var(--font);
+      font-size: 12px;
+    }
+    button:hover { background: var(--accent); color: #fff; }
+    button.active { background: var(--accent); color: #fff; }
+    input, select {
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      padding: 4px 8px; border-radius: 3px; font-family: var(--font); font-size: 12px;
+    }
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tab {
+      padding: 6px 14px; cursor: pointer; border: 1px solid var(--border);
+      border-radius: 3px 3px 0 0; background: var(--surface); color: var(--text-dim);
+    }
+    .tab.active { background: var(--bg); color: var(--accent); border-bottom-color: var(--bg); }
+    .empty-state { text-align: center; padding: 40px; color: var(--text-dim); }
+    .compare-col { display: flex; gap: 12px; }
+    .compare-col > div { flex: 1; }
+    #fileInput { display: none; }
+  </style>
+</head>
+<body>
+  <div class="lab-header">
+    <h1>Simulation Lab</h1>
+    <span class="info" id="labInfo">Load artifact files to begin</span>
+    <button onclick="document.getElementById('fileInput').click()">Load Artifacts</button>
+    <input type="file" id="fileInput" accept=".jsonl,.json" multiple>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="lab-content">
+    <div class="lab-sidebar">
+      <div class="section">
+        <div class="section-title">Runs (<span id="runCount">0</span>)</div>
+        <div id="runList"></div>
+      </div>
+    </div>
+
+    <div class="lab-main">
+      <div class="tab-bar">
+        <div class="tab active" data-tab="summary" onclick="switchTab('summary')">Summary</div>
+        <div class="tab" data-tab="rewards" onclick="switchTab('rewards')">Rewards</div>
+        <div class="tab" data-tab="lineage" onclick="switchTab('lineage')">Lineage</div>
+        <div class="tab" data-tab="analytics" onclick="switchTab('analytics')">Analytics</div>
+        <div class="tab" data-tab="compare" onclick="switchTab('compare')">Compare</div>
+      </div>
+
+      <div id="tab-summary">
+        <div id="summaryContent" class="empty-state">Select a run from the sidebar</div>
+      </div>
+
+      <div id="tab-rewards" style="display:none">
+        <div id="rewardsContent" class="empty-state">Select a run to view reward breakdown</div>
+      </div>
+
+      <div id="tab-lineage" style="display:none">
+        <div id="lineageContent" class="empty-state">Load artifacts with lineage data</div>
+      </div>
+
+      <div id="tab-analytics" style="display:none">
+        <div id="analyticsContent" class="empty-state">Load multiple runs for analytics</div>
+      </div>
+
+      <div id="tab-compare" style="display:none">
+        <div class="controls">
+          <span style="color:var(--text-dim)">Run A:</span>
+          <select id="compareA"></select>
+          <span style="color:var(--text-dim)">Run B:</span>
+          <select id="compareB"></select>
+          <button onclick="runComparison()">Compare</button>
+        </div>
+        <div id="compareContent" class="empty-state">Select two runs to compare</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let artifacts = [];
+    let selectedRunId = null;
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      for (const file of e.target.files) {
+        const text = await file.text();
+        if (file.name.endsWith('.jsonl')) {
+          for (const line of text.trim().split('\n')) {
+            if (line.trim()) {
+              try { artifacts.push(JSON.parse(line)); } catch {}
+            }
+          }
+        } else {
+          try {
+            const data = JSON.parse(text);
+            if (Array.isArray(data)) artifacts.push(...data);
+            else artifacts.push(data);
+          } catch {}
+        }
+      }
+      e.target.value = '';
+      refresh();
+    });
+
+    function clearAll() {
+      artifacts = [];
+      selectedRunId = null;
+      refresh();
+    }
+
+    function refresh() {
+      renderRunList();
+      renderCompareSelectors();
+      updateInfo();
+      if (artifacts.length > 0) renderAnalytics();
+      if (selectedRunId) selectRun(selectedRunId);
+    }
+
+    function updateInfo() {
+      document.getElementById('labInfo').textContent =
+        artifacts.length > 0 ? `${artifacts.length} runs loaded` : 'Load artifact files to begin';
+      document.getElementById('runCount').textContent = artifacts.length;
+    }
+
+    function renderRunList() {
+      const list = document.getElementById('runList');
+      list.innerHTML = '';
+      for (const art of artifacts) {
+        const s = art.summary || {};
+        const div = document.createElement('div');
+        div.className = 'run-item' + (art.runId === selectedRunId ? ' selected' : '');
+        div.innerHTML = `
+          <div class="run-id">${art.runId || '?'}</div>
+          <div class="run-stats">
+            T=${(s.survivalTime || 0).toFixed(0)}s L${s.level || 0} K=${s.kills || 0}
+            W${s.wave || 0} R=${art.reward?.total?.toFixed(0) || '?'}
+          </div>`;
+        div.onclick = () => selectRun(art.runId);
+        list.appendChild(div);
+      }
+    }
+
+    function selectRun(runId) {
+      selectedRunId = runId;
+      const art = artifacts.find(a => a.runId === runId);
+      if (!art) return;
+
+      renderRunList();
+      renderSummary(art);
+      renderRewards(art);
+      renderLineage();
+    }
+
+    function renderSummary(art) {
+      const s = art.summary || {};
+      const bc = art.botConfig || {};
+      document.getElementById('summaryContent').innerHTML = `
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Run Info</h3>
+            <div class="stat"><span class="label">Run ID</span><span class="value">${art.runId}</span></div>
+            <div class="stat"><span class="label">Parent</span><span class="value">${art.parentRunId || 'none'}</span></div>
+            <div class="stat"><span class="label">Generation</span><span class="value">${art.generation || 0}</span></div>
+            <div class="stat"><span class="label">Seed</span><span class="value">${art.seed}</span></div>
+            <div class="stat"><span class="label">Bot</span><span class="value">${bc.name || '?'}</span></div>
+            <div class="stat"><span class="label">Biases</span><span class="value">${(bc.biases || []).join(', ') || 'none'}</span></div>
+          </div>
+          <div class="panel">
+            <h3>Results</h3>
+            <div class="stat"><span class="label">Survival</span><span class="value">${(s.survivalTime || 0).toFixed(1)}s</span></div>
+            <div class="stat"><span class="label">Survived</span><span class="value" style="color:${s.survived ? 'var(--good)' : 'var(--bad)'}">${s.survived ? 'YES' : 'NO'}</span></div>
+            <div class="stat"><span class="label">Kills</span><span class="value">${s.kills || 0}</span></div>
+            <div class="stat"><span class="label">Elite Kills</span><span class="value">${s.eliteKills || 0}</span></div>
+            <div class="stat"><span class="label">Level</span><span class="value">${s.level || 0}</span></div>
+            <div class="stat"><span class="label">Wave</span><span class="value">${s.wave || 0}</span></div>
+            <div class="stat"><span class="label">XP</span><span class="value">${s.totalXP || 0}</span></div>
+            <div class="stat"><span class="label">Damage Taken</span><span class="value">${(s.damageTaken || 0).toFixed(0)}</span></div>
+            <div class="stat"><span class="label">Score</span><span class="value" style="color:var(--accent)">${(s.score || 0).toFixed(1)}</span></div>
+            <div class="stat"><span class="label">Reward</span><span class="value" style="color:var(--accent)">${(art.reward?.total || 0).toFixed(1)}</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Upgrade Path</h3>
+          <div>${(s.upgradePath || []).join(' → ') || 'none'}</div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Events (${(art.events || []).length})</h3>
+            <div style="max-height:200px;overflow-y:auto;font-size:11px">
+              ${(art.events || []).map(e =>
+                `<div class="stat"><span class="label">${e.type}</span><span class="value">${e.time?.toFixed(1) || '?'}s ${e.wave !== undefined ? 'W' + e.wave : ''}</span></div>`
+              ).join('')}
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Snapshots (${(art.snapshots || []).length})</h3>
+            <div style="max-height:200px;overflow-y:auto;font-size:11px">
+              ${(art.snapshots || []).map(sn =>
+                `<div class="stat"><span class="label">${sn.time?.toFixed(0) || '?'}s</span><span class="value">HP=${sn.hp?.toFixed(0)}/${sn.maxHp?.toFixed(0)} L${sn.level} K${sn.kills} E=${sn.enemies}</span></div>`
+              ).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderRewards(art) {
+      if (!art.reward) {
+        document.getElementById('rewardsContent').innerHTML = '<div class="empty-state">No reward data</div>';
+        return;
+      }
+      const maxAbs = Math.max(...art.reward.components.map(c => Math.abs(c.contribution)), 1);
+      document.getElementById('rewardsContent').innerHTML = `
+        <div class="panel">
+          <h3>Total Reward: ${art.reward.total.toFixed(1)}</h3>
+          ${art.reward.components.map(c => {
+            const pct = Math.abs(c.contribution) / maxAbs * 100;
+            const cls = c.contribution >= 0 ? 'positive' : 'negative';
+            return `<div class="reward-bar">
+              <span class="name">${c.name}</span>
+              <div class="bar"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+              <span class="val">${c.contribution.toFixed(1)} (raw: ${c.raw.toFixed(1)})</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function renderLineage() {
+      const el = document.getElementById('lineageContent');
+      if (artifacts.length < 2) {
+        el.innerHTML = '<div class="empty-state">Need multiple runs for lineage view</div>';
+        return;
+      }
+
+      // Build tree
+      const byId = new Map(artifacts.map(a => [a.runId, a]));
+      const roots = artifacts.filter(a => !a.parentRunId || !byId.has(a.parentRunId));
+      const children = new Map();
+      for (const art of artifacts) {
+        if (art.parentRunId && byId.has(art.parentRunId)) {
+          if (!children.has(art.parentRunId)) children.set(art.parentRunId, []);
+          children.get(art.parentRunId).push(art);
+        }
+      }
+
+      const bestScore = Math.max(...artifacts.map(a => a.summary?.score ?? 0));
+
+      function renderNode(art, depth) {
+        const s = art.summary || {};
+        const isBest = (s.score || 0) === bestScore;
+        const kids = children.get(art.runId) || [];
+        return `<div class="${depth > 0 ? 'lineage-node' : 'lineage-root'}${isBest ? ' best' : ''}">
+          <span style="color:var(--accent);cursor:pointer" onclick="selectRun('${art.runId}')">${art.runId}</span>
+          <span style="color:var(--text-dim)"> gen=${art.generation || 0} R=${art.reward?.total?.toFixed(0) || '?'} K=${s.kills || 0} W${s.wave || 0}</span>
+          ${isBest ? '<span style="color:var(--good)"> ★ best</span>' : ''}
+          ${kids.map(k => renderNode(k, depth + 1)).join('')}
+        </div>`;
+      }
+
+      el.innerHTML = `<div class="panel lineage-tree"><h3>Ancestry Tree</h3>${roots.map(r => renderNode(r, 0)).join('')}</div>`;
+    }
+
+    function renderAnalytics() {
+      const el = document.getElementById('analyticsContent');
+      if (artifacts.length < 2) {
+        el.innerHTML = '<div class="empty-state">Need multiple runs for analytics</div>';
+        return;
+      }
+
+      // Compute analytics in-browser
+      const report = computeAnalyticsInBrowser(artifacts);
+
+      el.innerHTML = `
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Best Upgrades by Reward</h3>
+            <table><tr><th>Upgrade</th><th>Avg Reward</th><th>Count</th></tr>
+            ${report.bestByReward.slice(0, 10).map(e =>
+              `<tr><td>${e.upgrade}</td><td>${e.avgReward.toFixed(1)}</td><td>${e.count}</td></tr>`
+            ).join('')}
+            </table>
+          </div>
+          <div class="panel">
+            <h3>Strongest First Pick</h3>
+            <table><tr><th>Upgrade</th><th>Avg Reward</th><th>Pick Rate</th></tr>
+            ${report.firstPick.slice(0, 8).map(e =>
+              `<tr><td>${e.upgrade}</td><td>${e.avgReward.toFixed(1)}</td><td>${(e.pickRate * 100).toFixed(0)}%</td></tr>`
+            ).join('')}
+            </table>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Strongest Pairings</h3>
+            <table><tr><th>Pair</th><th>Avg Reward</th><th>Count</th></tr>
+            ${report.pairings.slice(0, 10).map(e =>
+              `<tr><td>${e.pair}</td><td>${e.avgReward.toFixed(1)}</td><td>${e.count}</td></tr>`
+            ).join('')}
+            </table>
+          </div>
+          <div class="panel">
+            <h3>Dead Picks</h3>
+            <table><tr><th>Upgrade</th><th>Pick Rate</th><th>Reward Delta</th></tr>
+            ${report.deadPicks.slice(0, 8).map(e =>
+              `<tr><td>${e.upgrade}</td><td>${(e.pickRate * 100).toFixed(0)}%</td><td style="color:var(--bad)">${e.delta.toFixed(1)}</td></tr>`
+            ).join('')}
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function computeAnalyticsInBrowser(arts) {
+      const upgradeRewards = {};
+      const firstPicks = {};
+      const pairScores = {};
+
+      for (const art of arts) {
+        const path = art.summary?.upgradePath || [];
+        const reward = art.reward?.total ?? art.summary?.score ?? 0;
+
+        for (const id of new Set(path)) {
+          if (!upgradeRewards[id]) upgradeRewards[id] = { rewards: [], count: 0 };
+          upgradeRewards[id].rewards.push(reward);
+          upgradeRewards[id].count++;
+        }
+
+        if (path.length > 0) {
+          const first = path[0];
+          if (!firstPicks[first]) firstPicks[first] = { rewards: [], count: 0 };
+          firstPicks[first].rewards.push(reward);
+          firstPicks[first].count++;
+        }
+
+        const uniq = [...new Set(path)];
+        for (let i = 0; i < uniq.length; i++) {
+          for (let j = i + 1; j < uniq.length; j++) {
+            const pair = [uniq[i], uniq[j]].sort().join('+');
+            if (!pairScores[pair]) pairScores[pair] = { rewards: [], count: 0 };
+            pairScores[pair].rewards.push(reward);
+            pairScores[pair].count++;
+          }
+        }
+      }
+
+      const avg = arr => arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
+      const overallMean = avg(arts.map(a => a.reward?.total ?? a.summary?.score ?? 0));
+
+      return {
+        bestByReward: Object.entries(upgradeRewards)
+          .map(([id, d]) => ({ upgrade: id, avgReward: avg(d.rewards), count: d.count }))
+          .sort((a, b) => b.avgReward - a.avgReward),
+        firstPick: Object.entries(firstPicks)
+          .map(([id, d]) => ({ upgrade: id, avgReward: avg(d.rewards), pickRate: d.count / arts.length }))
+          .sort((a, b) => b.avgReward - a.avgReward),
+        pairings: Object.entries(pairScores)
+          .filter(([, d]) => d.count >= 2)
+          .map(([pair, d]) => ({ pair, avgReward: avg(d.rewards), count: d.count }))
+          .sort((a, b) => b.avgReward - a.avgReward),
+        deadPicks: Object.entries(upgradeRewards)
+          .filter(([, d]) => d.count >= 2)
+          .map(([id, d]) => ({ upgrade: id, pickRate: d.count / arts.length, delta: avg(d.rewards) - overallMean }))
+          .filter(e => e.delta < 0)
+          .sort((a, b) => a.delta - b.delta),
+      };
+    }
+
+    function renderCompareSelectors() {
+      const selA = document.getElementById('compareA');
+      const selB = document.getElementById('compareB');
+      const opts = artifacts.map(a =>
+        `<option value="${a.runId}">${a.runId} (R=${a.reward?.total?.toFixed(0) || '?'})</option>`
+      ).join('');
+      selA.innerHTML = opts;
+      selB.innerHTML = opts;
+      if (artifacts.length > 1) selB.selectedIndex = 1;
+    }
+
+    function runComparison() {
+      const idA = document.getElementById('compareA').value;
+      const idB = document.getElementById('compareB').value;
+      const artA = artifacts.find(a => a.runId === idA);
+      const artB = artifacts.find(a => a.runId === idB);
+      if (!artA || !artB) return;
+
+      const sa = artA.summary || {};
+      const sb = artB.summary || {};
+      const metrics = ['survivalTime', 'kills', 'level', 'wave', 'totalXP', 'damageTaken', 'score'];
+
+      let rows = '';
+      for (const key of metrics) {
+        const va = sa[key] || 0;
+        const vb = sb[key] || 0;
+        const diff = vb - va;
+        const pct = va !== 0 ? ((vb - va) / va * 100).toFixed(0) : '—';
+        const col = diff > 0 ? 'var(--good)' : diff < 0 ? 'var(--bad)' : 'var(--text-dim)';
+        rows += `<tr><td>${key}</td><td>${typeof va === 'number' ? va.toFixed(1) : va}</td><td>${typeof vb === 'number' ? vb.toFixed(1) : vb}</td><td style="color:${col}">${diff >= 0 ? '+' : ''}${typeof diff === 'number' ? diff.toFixed(1) : diff} (${pct}%)</td></tr>`;
+      }
+
+      // Reward comparison
+      let rewardRows = '';
+      if (artA.reward && artB.reward) {
+        for (const ca of artA.reward.components) {
+          const cb = artB.reward.components.find(c => c.name === ca.name);
+          if (cb) {
+            const diff = cb.contribution - ca.contribution;
+            const col = diff > 0 ? 'var(--good)' : diff < 0 ? 'var(--bad)' : 'var(--text-dim)';
+            rewardRows += `<tr><td>${ca.name}</td><td>${ca.contribution.toFixed(1)}</td><td>${cb.contribution.toFixed(1)}</td><td style="color:${col}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)}</td></tr>`;
+          }
+        }
+      }
+
+      document.getElementById('compareContent').innerHTML = `
+        <div class="panel">
+          <h3>Metrics Comparison</h3>
+          <table><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>Diff</th></tr>${rows}</table>
+        </div>
+        ${rewardRows ? `<div class="panel"><h3>Reward Comparison</h3><table><tr><th>Component</th><th>Run A</th><th>Run B</th><th>Diff</th></tr>${rewardRows}</table></div>` : ''}
+        <div class="grid-2">
+          <div class="panel"><h3>Upgrades A</h3><div>${(sa.upgradePath || []).join(' → ') || 'none'}</div></div>
+          <div class="panel"><h3>Upgrades B</h3><div>${(sb.upgradePath || []).join(' → ') || 'none'}</div></div>
+        </div>`;
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      ['summary', 'rewards', 'lineage', 'analytics', 'compare'].forEach(id => {
+        document.getElementById('tab-' + id).style.display = id === name ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>

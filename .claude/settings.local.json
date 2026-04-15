@@ -34,7 +34,8 @@
       "Bash(node -e ' *)",
       "Bash(node --input-type=module -e ' *)",
       "Bash(kill 4959)",
-      "Bash(kill 5773)"
+      "Bash(kill 5773)",
+      "Bash(tasklist)"
     ]
   }
 }

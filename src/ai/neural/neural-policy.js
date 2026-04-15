@@ -10,14 +10,27 @@ import { createUpgradeStrategy } from '../../systems/player-ai/upgrade-strategy.
 import { FeedforwardNetwork } from './feedforward.js';
 import { INPUT_SIZE, encodeObservation } from './encode.js';
 
-// Load trained weights — try static import (Vite/browser) with Node fallback
+// Load trained weights at module load time.
+// In browser/Vite: use fetch with import.meta.url resolution.
+// In Node (workers/tests): use fs.readFileSync.
 let TRAINED_WEIGHTS = null;
 try {
-  // Vite transforms this at build time; Node needs the import attribute
-  const mod = await import('./trained-weights.json', { with: { type: 'json' } });
-  TRAINED_WEIGHTS = mod.default;
+  if (typeof globalThis.document !== 'undefined') {
+    // Browser — resolve relative to this module's URL
+    const url = new URL('./trained-weights.json', import.meta.url).href;
+    const resp = await fetch(url);
+    if (resp.ok) TRAINED_WEIGHTS = await resp.json();
+  } else {
+    // Node
+    const { readFileSync } = await import('fs');
+    const { fileURLToPath } = await import('url');
+    const { dirname, resolve } = await import('path');
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const raw = readFileSync(resolve(dir, 'trained-weights.json'), 'utf-8');
+    TRAINED_WEIGHTS = JSON.parse(raw);
+  }
 } catch {
-  // If file doesn't exist yet (pre-training), that's fine
+  // No trained weights available — will use zeros or caller-provided weights
 }
 
 const DEFAULT_TOPOLOGY = [INPUT_SIZE, 32, 16, 4];
