@@ -204,11 +204,15 @@ export function createWebGPURenderer(canvas) {
   let instanceBuffer = null;
   let resizeHandler = null;
 
-  // HUD fallback — uses an offscreen Canvas 2D for text rendering
-  let effectsCanvas = null;
+  // Creature/effects overlay — low-res offscreen canvas, blitted to visible overlay
+  let effectsCanvas = null;   // visible overlay (display resolution)
   let effectsCtx = null;
+  let creatureOffscreen = null; // low-res offscreen for pixel creatures
+  let creatureOffCtx = null;
   let creatureResolver = null;
   let lastSnapshotTime = -1;
+  let renderW = 0;
+  let renderH = 0;
 
   return {
     id: 'webgpu',
@@ -334,15 +338,34 @@ export function createWebGPURenderer(canvas) {
       window.addEventListener('resize', resizeHandler);
     },
 
+    /** Low-res render dimensions for camera/view calculations */
+    get renderWidth() { return renderW; },
+    get renderHeight() { return renderH; },
+
     resize() {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
+
+      // Low-res offscreen for pixel creatures (matches Canvas 2D renderer)
+      const RENDER_HEIGHT = 270;
+      const aspect = rect.width / rect.height || 16 / 9;
+      renderH = RENDER_HEIGHT;
+      renderW = Math.round(renderH * aspect);
+
+      if (typeof document !== 'undefined') {
+        creatureOffscreen = document.createElement('canvas');
+        creatureOffscreen.width = renderW;
+        creatureOffscreen.height = renderH;
+        creatureOffCtx = creatureOffscreen.getContext('2d');
+        creatureOffCtx.imageSmoothingEnabled = false;
+      }
+
       if (effectsCanvas) {
         effectsCanvas.width = rect.width * dpr;
         effectsCanvas.height = rect.height * dpr;
-        effectsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        effectsCtx.imageSmoothingEnabled = false;
       }
     },
 
@@ -392,8 +415,8 @@ export function createWebGPURenderer(canvas) {
         if (e.x < view.left - margin || e.x > view.right + margin ||
             e.y < view.top - margin || e.y > view.bottom + margin) continue;
 
-        // Enemies with archetypes go to creature overlay
-        if (e.type >= 2 && e.type <= 9 && getArchetype(e.type)) {
+        // Creatures with archetypes go to creature overlay
+        if (getArchetype(e.type)) {
           creatureEnemies.push(e);
           continue;
         }
@@ -408,9 +431,7 @@ export function createWebGPURenderer(canvas) {
         let alpha = 1;
         let shape = 0; // circle
 
-        if (e.type === TYPE.PLAYER) {
-          cr = 1; cg = 0.82; cb = 0.5;
-        } else if (e.type >= 2 && e.type <= 9) {
+        if (e.type >= 2 && e.type <= 9) {
           // Fallback for enemies without archetypes
           const key = TYPE_TO_KEY[e.type];
           const def = key ? ENEMY_DEFS[key] : null;
@@ -480,24 +501,36 @@ export function createWebGPURenderer(canvas) {
       pass.end();
       device.queue.submit([encoder.finish()]);
 
-      // Creatures + effects via Canvas 2D overlay (world space)
-      if (effectsCtx) {
-        effectsCtx.clearRect(0, 0, cw, ch);
-        effectsCtx.save();
-        effectsCtx.translate(cw / 2, ch / 2);
-        effectsCtx.scale(camera.zoom, camera.zoom);
-        effectsCtx.translate(-camera.x, -camera.y);
+      // Creatures + effects via low-res offscreen, blitted to overlay
+      if (effectsCtx && creatureOffCtx) {
+        const dpr = window.devicePixelRatio || 1;
+        const physW = Math.round(cw * dpr);
+        const physH = Math.round(ch * dpr);
 
-        // Draw creature enemies on overlay
+        // Draw creatures to low-res offscreen canvas
+        creatureOffCtx.setTransform(1, 0, 0, 1, 0, 0);
+        creatureOffCtx.clearRect(0, 0, renderW, renderH);
+        creatureOffCtx.imageSmoothingEnabled = false;
+        creatureOffCtx.save();
+        creatureOffCtx.translate(renderW / 2, renderH / 2);
+        creatureOffCtx.scale(camera.zoom, camera.zoom);
+        creatureOffCtx.translate(-camera.x, -camera.y);
+
         if (creatureResolver) {
           for (const e of creatureEnemies) {
             const model = creatureResolver.resolve(e, snapshot.time, Math.max(dt, 1 / 60));
-            if (model) drawCreature(effectsCtx, model);
+            if (model) drawCreature(creatureOffCtx, model);
           }
         }
 
-        drawEffects(effectsCtx, snapshot, camera);
-        effectsCtx.restore();
+        drawEffects(creatureOffCtx, snapshot, camera);
+        creatureOffCtx.restore();
+
+        // Blit low-res to overlay at full resolution with nearest-neighbor
+        effectsCtx.setTransform(1, 0, 0, 1, 0, 0);
+        effectsCtx.clearRect(0, 0, physW, physH);
+        effectsCtx.imageSmoothingEnabled = false;
+        effectsCtx.drawImage(creatureOffscreen, 0, 0, physW, physH);
       }
     },
 
@@ -511,6 +544,8 @@ export function createWebGPURenderer(canvas) {
       }
       effectsCanvas = null;
       effectsCtx = null;
+      creatureOffscreen = null;
+      creatureOffCtx = null;
       if (creatureResolver) { creatureResolver.reset(); creatureResolver = null; }
       lastSnapshotTime = -1;
       if (instanceBuffer) { instanceBuffer.destroy(); instanceBuffer = null; }
