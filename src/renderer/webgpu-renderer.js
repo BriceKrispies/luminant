@@ -512,9 +512,9 @@ export function createWebGPURenderer(canvas) {
         creatureOffCtx.clearRect(0, 0, renderW, renderH);
         creatureOffCtx.imageSmoothingEnabled = false;
         creatureOffCtx.save();
-        creatureOffCtx.translate(renderW / 2, renderH / 2);
+        creatureOffCtx.translate(Math.round(renderW / 2), Math.round(renderH / 2));
         creatureOffCtx.scale(camera.zoom, camera.zoom);
-        creatureOffCtx.translate(-camera.x, -camera.y);
+        creatureOffCtx.translate(-Math.round(camera.x), -Math.round(camera.y));
 
         if (creatureResolver) {
           for (const e of creatureEnemies) {

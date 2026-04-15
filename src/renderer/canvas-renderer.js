@@ -97,9 +97,9 @@ export function createCanvasRenderer(canvas) {
       // Camera view bounds are now computed from render dimensions,
       // so zoom maps directly.
       const view = camera.getViewBounds();
-      offCtx.translate(renderW / 2, renderH / 2);
+      offCtx.translate(Math.round(renderW / 2), Math.round(renderH / 2));
       offCtx.scale(camera.zoom, camera.zoom);
-      offCtx.translate(-camera.x, -camera.y);
+      offCtx.translate(-Math.round(camera.x), -Math.round(camera.y));
 
       // Layer 1: Ground
       drawGround(offCtx, view, camera);
