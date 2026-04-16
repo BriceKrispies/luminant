@@ -77,6 +77,18 @@
 - Tests: `creatures.test.js`, `player-ai.test.js`, `rigging.test.js`
 - Updated docs: `architecture.md`, `extending.md`, `CLAUDE.md`
 
+#### Visual Progression System (`src/renderer/creatures/progression.js`, `progression-visuals.js`)
+- Data-driven progression state derivation: tier, bounded intensity (asymptotic curve), modulation phase, unlocked feature flags
+- Player-specific 9-milestone config spanning levels 1-50: glow → tendrils → glow pulse → halo → tendril motion → crown → second-order motion → ascended
+- Bounded visual effects: body glow (radial, pulsing), energy tendrils (animated wisps), halo/crown (overhead rings + crown points), level-up burst (flash + ring + particles)
+- All rendering at pixel-art scale (1 world-unit pixels), works with both Canvas 2D and WebGPU overlay paths
+- Per-archetype progression config registry with default fallback for non-player archetypes
+- Infinite modulation: phase, hue/temperature drift, second-order amplitude — never unbounded
+- Level-up burst state tracker with trigger/progress/deactivate lifecycle
+- Integrated into creature-model.js resolver (both skeleton and legacy paths) and draw-pixel.js
+- Studio expansion: level slider (1-60), XP progress, seed control, per-feature toggles (glow/tendrils/halo/burst), progression debug panel with tier/intensity/features/derived params
+- Tests: 39 tests covering tier computation, intensity bounds, feature unlocks, mod phase wrapping, full state determinism, level-band behavior, bounded element counts, burst lifecycle, config registry, debug formatting
+
 ## Next Steps
 
 - Visual polish: creature rendering tuning, particle effects, screen shake

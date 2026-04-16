@@ -170,11 +170,11 @@ registerSecondary('brute', (config = {}) => {
     apply(pose, skeleton, entity, time, dt, variation) {
       const phase = variation.wobblePhase || 0;
 
-      // Heavy settle — body sinks slightly, recovers slowly
+      // Heavy settle — body sinks on deceleration, recovers slowly
       const speed = Math.sqrt(entity.vx * entity.vx + entity.vy * entity.vy);
       const decel = Math.max(0, Math.sqrt(prevVx * prevVx + prevVy * prevVy) - speed);
-      settleEnergy += decel * 0.01;
-      settleEnergy *= 0.92; // decay
+      settleEnergy += decel * 0.015;
+      settleEnergy *= 0.90; // slower decay — heavier feel
       prevVx = entity.vx;
       prevVy = entity.vy;
 
@@ -182,38 +182,25 @@ registerSecondary('brute', (config = {}) => {
       if (body !== -1) {
         const off = body * POSE_STRIDE;
         // Downward settle on deceleration
-        pose[off + PY] += settleEnergy * 2;
+        pose[off + PY] += settleEnergy * 2.5;
         // Wider stance when moving
         if (speed > 10) {
-          pose[off + PSX] *= 1 + Math.min(speed * 0.0005, 0.04);
+          pose[off + PSX] *= 1 + Math.min(speed * 0.0006, 0.05);
         }
       }
 
-      // Shoulder/body mass lag — upper body lags behind direction changes
-      for (const boneName of ['left_shoulder', 'right_shoulder', 'chest']) {
-        const idx = skeleton.getBoneIndex(boneName);
-        if (idx === -1) continue;
-        const off = idx * POSE_STRIDE;
-        // Slight opposite-to-velocity rotation (momentum)
-        const vAngle = Math.atan2(entity.vy, entity.vx);
+      // Upper body mass lag — chest lags behind direction changes.
+      // Only applied to chest; shoulders/head/arms inherit via hierarchy.
+      const chest = skeleton.getBoneIndex('chest');
+      if (chest !== -1) {
+        const off = chest * POSE_STRIDE;
         pose[off + PROT] += Math.sin(time * 0.8 + phase) * 0.03;
-        // Mass lag: shift opposite to direction
         if (speed > 15) {
-          pose[off + PX] -= Math.cos(vAngle) * 0.3;
-          pose[off + PY] -= Math.sin(vAngle) * 0.3;
+          const vAngle = Math.atan2(entity.vy, entity.vx);
+          const facing = entity.facing !== undefined ? entity.facing : vAngle;
+          const localAngle = vAngle - facing;
+          pose[off + PROT] -= Math.sin(localAngle) * 0.04;
         }
-      }
-
-      // Delayed arm swing
-      const leftArm = skeleton.getBoneIndex('left_arm');
-      const rightArm = skeleton.getBoneIndex('right_arm');
-      if (leftArm !== -1 && speed > 10) {
-        const off = leftArm * POSE_STRIDE;
-        pose[off + PROT] += Math.sin(time * 3 + phase) * 0.12;
-      }
-      if (rightArm !== -1 && speed > 10) {
-        const off = rightArm * POSE_STRIDE;
-        pose[off + PROT] += Math.sin(time * 3 + phase + Math.PI) * 0.12;
       }
 
       // Head — minimal independent motion, heavy and deliberate

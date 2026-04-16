@@ -10,6 +10,7 @@
  */
 
 import { POSE_STRIDE, PX, PY } from './skeleton.js';
+import { drawProgressionEffects } from './progression-visuals.js';
 
 // ── Color helpers ──
 
@@ -165,30 +166,105 @@ function drawPixelFlame(ctx, cx, cy, pal, deform, time) {
   }
 }
 
-function drawPixelHulk(ctx, cx, cy, pal, deform, time) {
+function drawPixelHomunculus(ctx, model) {
+  const { worldPose, skeleton, archetype } = model;
+  const pal = archetype.palette;
+
+  // Helper to read bone world position
+  function bonePos(name) {
+    const idx = skeleton.getBoneIndex(name);
+    if (idx === -1) return null;
+    const off = idx * POSE_STRIDE;
+    return { x: worldPose[off + PX], y: worldPose[off + PY] };
+  }
+
+  const body = bonePos('body');
+  const chest = bonePos('chest');
+  const head = bonePos('head');
+  const lShoulder = bonePos('left_shoulder');
+  const rShoulder = bonePos('right_shoulder');
+  const lArm = bonePos('left_arm');
+  const rArm = bonePos('right_arm');
+  const lHand = bonePos('left_hand');
+  const rHand = bonePos('right_hand');
+
+  if (!body) return; // safety
+
   // Shadow
-  pxEllipse(ctx, cx, cy + 7, 5, 2, [0, 0, 0], 0.35);
+  pxEllipse(ctx, body.x, body.y + 8, 6, 2, [0, 0, 0], 0.3);
 
-  // Main body
-  const bw = 6;
-  const bh = 5;
-  pxRect(ctx, cx - bw, cy - bh, bw * 2, bh * 2, pal.base);
-  pxRect(ctx, cx - bw + 1, cy - bh + 1, bw * 2 - 2, bh * 2 - 2, pal.interior);
-  pxRect(ctx, cx - bw, cy - bh, bw, bh - 1, pal.base);
-  pxRect(ctx, cx - bw + 1, cy - bh + 1, 3, 3, pal.highlight);
+  // -- Arms behind body (draw first) --
+  const armColor = lerpColor(pal.base, pal.interior, 0.3);
+  const fistColor = lerpColor(pal.base, pal.highlight, 0.35);
 
-  // Spikes
-  const spikeColor = lerpColor(pal.base, pal.highlight, 0.4);
-  for (let i = 0; i < 3; i++) {
-    px(ctx, cx - bw - 1 - i, cy - bh + 1 - i, spikeColor);
-    px(ctx, cx + bw + i, cy - bh + 1 - i, spikeColor);
+  if (lShoulder && lArm) {
+    // Upper arm — thick pixel line
+    pxLine(ctx, lShoulder.x, lShoulder.y, lArm.x, lArm.y, armColor, 2);
+    if (lHand) {
+      // Lower arm
+      pxLine(ctx, lArm.x, lArm.y, lHand.x, lHand.y, armColor, 2);
+      // Fist
+      pxCircle(ctx, lHand.x, lHand.y, 2, fistColor);
+    }
   }
-  for (let i = 0; i < 2; i++) {
-    px(ctx, cx, cy - bh - 1 - i, spikeColor);
+  if (rShoulder && rArm) {
+    pxLine(ctx, rShoulder.x, rShoulder.y, rArm.x, rArm.y, armColor, 2);
+    if (rHand) {
+      pxLine(ctx, rArm.x, rArm.y, rHand.x, rHand.y, armColor, 2);
+      pxCircle(ctx, rHand.x, rHand.y, 2, fistColor);
+    }
   }
 
-  // Specular
-  px(ctx, cx - bw + 2, cy - bh + 1, [1, 1, 1], 0.35);
+  // -- Torso: large hunched mass --
+  pxEllipse(ctx, body.x, body.y, 7, 5, pal.base);
+  pxEllipse(ctx, body.x, body.y + 1, 6, 4, pal.interior);
+  // Highlight on upper-left
+  pxEllipse(ctx, body.x - 1, body.y - 1, 4, 3, pal.base);
+  pxEllipse(ctx, body.x - 2, body.y - 2, 2, 2, pal.highlight);
+
+  // -- Chest / shoulder hump --
+  if (chest) {
+    pxEllipse(ctx, chest.x, chest.y, 5, 3, pal.base);
+    pxEllipse(ctx, chest.x, chest.y, 4, 2, lerpColor(pal.base, pal.highlight, 0.2));
+  }
+
+  // -- Shoulder pads --
+  if (lShoulder) {
+    pxCircle(ctx, lShoulder.x, lShoulder.y, 2, pal.base);
+    px(ctx, lShoulder.x, lShoulder.y - 1, pal.highlight, 0.5);
+  }
+  if (rShoulder) {
+    pxCircle(ctx, rShoulder.x, rShoulder.y, 2, pal.base);
+    px(ctx, rShoulder.x, rShoulder.y - 1, pal.highlight, 0.5);
+  }
+
+  // -- Head: tiny, hunched forward --
+  if (head) {
+    pxCircle(ctx, head.x, head.y, 2, pal.base);
+    px(ctx, head.x - 1, head.y - 1, pal.highlight, 0.6);
+    // Brow ridge
+    px(ctx, head.x - 2, head.y - 1, pal.interior);
+    px(ctx, head.x + 2, head.y - 1, pal.interior);
+  }
+
+  // Specular on body
+  px(ctx, body.x - 3, body.y - 3, [1, 1, 1], 0.3);
+}
+
+/** Draw a thick pixel line between two points */
+function pxLine(ctx, x0, y0, x1, y1, color, thickness) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const steps = Math.max(1, Math.round(dist));
+  ctx.fillStyle = rgb(color);
+  const half = (thickness - 1) / 2;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = Math.round(x0 + dx * t);
+    const py = Math.round(y0 + dy * t);
+    ctx.fillRect(px - Math.floor(half), py - Math.floor(half), thickness, thickness);
+  }
 }
 
 function drawPixelHero(ctx, cx, cy, pal, deform, time) {
@@ -321,18 +397,38 @@ export function drawCreaturePixel(ctx, model) {
     ctx.globalAlpha = Math.max(0, deform.opacity);
   }
 
+  // Progression glow (behind body)
+  const progression = model.progression;
+  const pToggles = model.progressionToggles;
+  if (progression && progression.glowStrength > 0.01) {
+    const glowOnly = { glow: true, tendrils: false, halo: false, burst: false };
+    if (pToggles) glowOnly.glow = pToggles.glow !== false;
+    drawProgressionEffects(ctx, cx, cy, progression, pal, model.radius, time, null, glowOnly);
+  }
+
   // Draw body
   switch (archetypeId) {
     case 'slime':  drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
     case 'ghost':  drawPixelWisp(ctx, cx, cy, pal, deform, time); break;
     case 'ember':  drawPixelFlame(ctx, cx, cy, pal, deform, time); break;
-    case 'brute':  drawPixelHulk(ctx, cx, cy, pal, deform, time); break;
+    case 'brute':  model.useSkeleton ? drawPixelHomunculus(ctx, model) : drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
     case 'player': drawPixelHero(ctx, cx, cy, pal, deform, time); break;
     default:       drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
   }
 
   // Eyes
   drawPixelEyes(ctx, model);
+
+  // Progression effects (tendrils, halo, burst — above body)
+  if (progression) {
+    const aboveToggles = { glow: false, tendrils: true, halo: true, burst: true };
+    if (pToggles) {
+      aboveToggles.tendrils = pToggles.tendrils !== false;
+      aboveToggles.halo = pToggles.halo !== false;
+      aboveToggles.burst = pToggles.burst !== false;
+    }
+    drawProgressionEffects(ctx, cx, cy, progression, pal, model.radius, time, model.burstState, aboveToggles);
+  }
 
   // HP bar
   drawPixelHP(ctx, model);

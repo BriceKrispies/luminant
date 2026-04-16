@@ -126,7 +126,6 @@ export function tensionOverlay(config = {}) {
       const off = idx * POSE_STRIDE;
 
       pose[off + PROT] -= leanAmount * intensity;
-      pose[off + PY] -= 1 * intensity;
     },
   };
 }

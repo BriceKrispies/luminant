@@ -396,6 +396,11 @@ async function main() {
     // Render
     if (steps.length > 0 || true) {
       const snapshot = createSnapshot(engine);
+      // Attach player level/XP to snapshot so renderer can drive progression visuals
+      if (snapshot.player) {
+        snapshot.player.level = xpSystem.level;
+        snapshot.player.xpProgress = xpSystem.xpToNext > 0 ? xpSystem.xp / xpSystem.xpToNext : 0;
+      }
       const metrics = engine.getMetrics();
 
       const gameState = {

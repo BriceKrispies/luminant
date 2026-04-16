@@ -11,14 +11,15 @@ The game is auto-mode only — AI policies control the player, there is no manua
 - **AI/Policy**: Policy-driven auto mode + observations + scoring (`src/ai/`)
 - **Player AI**: Layered utility-based AI system (`src/systems/player-ai/`) — sensors, utility scorer, movement planner, upgrade strategy
 - **Renderer**: Dual-backend with manager (`src/renderer/`) — WebGPU default, Canvas 2D fallback
-- **Creatures**: Procedural creature rendering (`src/renderer/creatures/`) — archetypes, deformations, Canvas 2D drawing
+- **Creatures**: Pixel-art creature rendering (`src/renderer/creatures/`) — archetypes, world-space pixel drawing, deformations, visual progression
 - **Skeletal Animation**: Custom 2D skeletal interpolation + skinned-mesh animation engine (`src/animation/`) — skeleton, pose, clip, sampler, blend, constraints, IK, mesh skinning, rig controller, runtime
 - **Content**: Data definitions (`src/content/`), rigged character data (`src/content/rigs/`, `src/content/animations/`)
 - **UI**: Menu, DOM HUD, level-up, game-over, upgrade picker (`src/ui/`)
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
 - **Simulation Lab**: Offline bot experimentation, reward shaping, lineage tracking, replay, upgrade analytics (`src/lab/`, `harness/simulation-lab.js`, `debug/simulation-lab.html`)
 - **Experiment Lab**: Structured experiment/training architecture — featurizer, moments, trajectories, evolutionary training, population analysis (`src/lab/`, `harness/experiment.js`, `debug/experiment-lab.html`)
-- **Studio**: Offline creature preview/render tool (`studio/`) — browser-based rig inspector + Node.js PNG export
+- **Studio**: Offline creature preview/render tool (`studio/`) — browser-based rig inspector + Node.js PNG export + level progression preview with debug panel
+- **Lab Page**: Live simulation gallery frontend (`lab/`) — deployed alongside the game, shows AI games running in real-time with per-tile stats. Modular panel architecture for future features.
 
 Engine owns entity data. Renderer reads snapshots. JS handles game rules.
 
@@ -46,8 +47,8 @@ Snapshot includes `facing` field (radians) for directional creature rendering.
 ## Renderer
 
 Dual-backend system with runtime switching:
-- **WebGPU** (`webgpu-renderer.js`): Instanced entity rendering, WGSL shaders, orthographic projection. Effects (slash, hit, death) drawn via Canvas 2D overlay.
-- **Canvas 2D** (`canvas-renderer.js`): Layered drawing (ground, lights, entities, effects, fog).
+- **WebGPU** (`webgpu-renderer.js`): Instanced entity rendering, WGSL shaders, orthographic projection. Creatures and effects drawn via low-res (270p) Canvas 2D overlay with nearest-neighbor upscaling.
+- **Canvas 2D** (`canvas-renderer.js`): Renders to a fixed 270p low-res offscreen canvas, then blits up to display with nearest-neighbor scaling for a pixel-art look. Layered drawing (ground, lights, entities, effects, fog). Integer camera snapping prevents sub-pixel anti-aliasing.
 - **Manager** (`renderer-manager.js`): Detects WebGPU, loads/saves preference to localStorage, handles runtime toggle (F4 / badge click). Replaces the canvas element on context switch since a canvas can only have one context type.
 - **Interface** (`renderer-interface.js`): Contract — `{ id, name, init(), resize(), render(snapshot, camera), dispose() }`.
 - **Creatures** (`creatures/`): Skeleton-based procedural creature rendering subsystem with layered rigging pipeline:
@@ -59,14 +60,14 @@ Dual-backend system with runtime switching:
   - `secondaries.js` — Per-archetype procedural motion (ghost drift, ember flicker, brute settle, slime bounce)
   - `expression.js` — Face expressions with blending, auto-blink, pupil bias
   - `skins.js` — Skin/variant separation (palette, slots, clips, profiles)
-  - `rig-data.js` — Complete rig data for all 4 archetypes (skeletons, slots, clips, expressions, overlays)
+  - `rig-data.js` — Complete rig data for all 5 archetypes including player (skeletons, slots, clips, expressions, overlays)
   - `archetypes.js` — Visual definitions with rig references, entity type mapping, seeded PRNG
   - `deformations.js` — Legacy deformation layers (wobble, breathing, squash-stretch, hit, death), still used for body shape wobble
   - `creature-model.js` — Resolver with skeleton-based primary path and legacy fallback
-  - `draw-canvas.js` — Dual-path drawing: skeleton slot/attachment rendering + legacy shape rendering
-  - `svg-renderer.js` — SVG export for offline/studio creature rendering
-  - `shapes/ghost.js` — Custom ghost body shape draw function
-  - Both backends draw creatures via Canvas 2D (WebGPU uses its effects overlay canvas)
+  - `draw-pixel.js` — World-space pixel drawing: per-archetype pixel functions (player, slime, ghost, brute, ember), 1 world unit = 1 render pixel. Draws progression effects (glow behind body, tendrils/halo/burst above). Used by both backends.
+  - `progression.js` — Data-driven visual progression state: derives tier, bounded intensity, modulation phase, unlocked features, and per-feature params from entity level/time/seed. Asymptotic intensity curve (never unbounded). Player config with 9 milestones (1-50). Per-archetype config registry with default fallback.
+  - `progression-visuals.js` — Progression effect drawing: radial body glow, animated energy tendrils, halo/crown rings, level-up burst particles. All pixel-art scale. Per-feature toggle support for studio.
+  - Both backends draw creatures via Canvas 2D at 270p low resolution (WebGPU uses a low-res offscreen canvas blitted to its overlay)
 
 ## Skeletal Animation Engine (`src/animation/`)
 
@@ -89,7 +90,7 @@ Custom 2D skeletal interpolation and skinned-mesh animation system. Render-side 
 
 **First rig:** Ghost Witch (`src/content/rigs/ghost-witch-rig.js`) — 15 bones: root, torso, head, hair, 2×arm chain (upper/lower/hand), 5 robe/cloth bones. 7 skinned meshes. Clips: idle, drift, chase, attack_windup, attack_release, hit_react, death, spawn.
 
-**Renderer integration:** `src/renderer/skinned-entities.js` — checks entity type, runs animation runtime, draws deformed mesh triangles. ENEMY_FAST uses skinned path. Debug overlay shows bones, wireframe, IK targets, anim state. Integrates via `drawEntities()` in existing pipeline.
+**Renderer integration:** `src/renderer/skinned-entities.js` — per-entity runtime cache, draws deformed mesh triangles. Currently used for ENEMY_FAST (ghost witch). Debug overlay shows bones, wireframe, IK targets, anim state.
 
 | Layer | Reads | Writes | Never touches |
 |-------|-------|--------|---------------|
@@ -122,6 +123,7 @@ npm run experiment:evaluate # Evaluate single config across seeds
 npm run experiment:analyze  # Population analysis on experiment artifacts
 npm run experiment:compare  # Compare generation winners
 npm run experiment:ui       # Open Experiment Lab UI in browser
+npm run lab:page     # Open /lab simulation gallery page in browser
 ```
 
 ## HUD
@@ -143,8 +145,8 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 
 ## AI / Policy System
 
-- **Auto-mode only** — AI brawler policy controls the player, no manual play or policy selection in UI
-- **Default policy: brawler** — aggressive, dives into clusters, highest scoring in batch sim
+- **Auto-mode only** — AI neural policy controls the player, no manual play or policy selection in UI
+- **Default policy: neural** — neuroevolution-trained feedforward network, set in `main.js` via `setPolicy('neural')`
 - **Policy** produces actions (dx, dy, attack, target) from observations each tick
 - **Observations** built from engine state: spatial sectors, threat density, safest escape vector (`safestDirX/Y`), weapon readiness (`weaponReady`, `weaponRange`, `enemiesInArc`)
 - **Intelligent attacks** — policy only swings when enemies are in range and weapon is ready, not always-attack
@@ -167,7 +169,9 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 
 New policies are weight profiles via `createUtilityPolicy()`. See `docs/extending.md` for how to add one.
 
-Debug overlay (`F3`) shows utility AI state: current intention, danger/encirclement levels, intention scores, and top candidate moves.
+Debug overlay (`F3`) shows AI state for whichever policy is active:
+- **Neural**: behavioral classification (stuck/overwhelmed/cornered/kiting/diving/idle/active), stuck frame counter, raw network outputs, key sensor metrics (HP, encirclement, threat, nearest enemy, edge distance)
+- **Utility**: current intention, danger/encirclement levels, intention scores, and top candidate moves
 
 ### Neural Policy (`src/ai/neural/`)
 
@@ -178,8 +182,10 @@ Neuroevolution-trained feedforward network as a drop-in policy replacement.
 - **`neural-policy.js`** — Policy wrapper registered as `'neural'`. Uses sensors for observation enrichment, brawler's upgrade strategy for level-ups. Output mapping: tanh for dx/dy, sigmoid for attack, tanh*PI for aim offset
 - **`trained-weights.json`** — Serialized best network from training (topology + flat weights + fitness history)
 - **Training**: `npm run train` runs `harness/neuroevolve.js` with worker pool (`harness/neuro-worker.js`). Population-based search: gaussian mutation, no crossover, elite selection, periodic random injection. Checkpoints every 10 gens to `results/`.
+- **`neural-diagnostics.js`** — Behavioral classifier: classifies each frame as stuck/overwhelmed/cornered/kiting/diving/idle/active from sensor data + network output. Tracks consecutive stuck frames. Exposes key input metrics for debug overlay.
 - **Topology**: [53, 32, 16, 4] = 2,324 parameters. 53 inputs from sensor layer, 4 raw outputs mapped to actions.
-- **To use in-game**: Change `main.js` `setPolicy('brawler')` to `setPolicy('neural')` after training
+- **Diagnostics**: Neural policy attaches `_neuralDebug` to actions (same pattern as utility's `_intention`). Debug overlay (F3) shows behavioral state, stuck counter, raw outputs, and key sensor metrics when neural policy is active.
+- **In-game**: Neural is the default policy in `main.js`. Brawler and other utility policies remain available for batch sim/evolve harnesses.
 
 ## Simulation Lab (`src/lab/`)
 
@@ -203,6 +209,24 @@ Offline bot experimentation subsystem. Sits around the existing headless simulat
 | Layer | Reads | Writes | Never touches |
 |-------|-------|--------|---------------|
 | Simulation Lab | Game-runner results, artifacts | JSON artifacts, analytics | Engine memory, DOM, Canvas |
+| Lab Page | Engine bindings, game systems, snapshots | Canvas pixels, DOM | N/A |
+
+## Lab Page (`lab/`)
+
+Live simulation gallery frontend deployed alongside the game at `/lab/`. Runs multiple AI game instances in-browser with visual rendering.
+
+**Structure:**
+- `lab/index.html` — page entry (registered as Vite multi-page input)
+- `lab/src/lab-app.js` — app shell with hash-based panel routing
+- `lab/src/panels/gallery.js` — gallery panel wiring controls to grid
+- `lab/src/components/sim-instance.js` — self-contained game (own WASM + systems + renderer + camera)
+- `lab/src/components/sim-gallery.js` — shared rAF loop, grid manager, speed multiplier
+- `lab/src/components/sim-controls.js` — add/clear/speed/policy controls
+- `lab/src/styles/lab.css` — layered CSS (tokens → layout → components → panels)
+
+**Key design:** Each SimInstance creates its own WASM engine via `loadEngine()`, its own game systems (player, spawner, director, weapons, xp, skills, cooldowns, elites), policy, Canvas 2D renderer, and camera. A single `requestAnimationFrame` loop in SimGallery ticks and renders all instances. Speed multiplier (1x/2x/4x/8x) runs additional fixed timesteps per frame.
+
+**Extending:** New panels added by creating a module in `lab/src/panels/` that exports `{ id, label, create(container), destroy() }` and registering it in `lab/src/lab-app.js`.
 
 ## Experiment / Training Architecture (`src/lab/`)
 
@@ -254,7 +278,7 @@ Structured experiment and evolutionary training platform built on the Simulation
 ## Extending Safely
 
 - New enemy type: add to `content/enemy-types.js`, types 2-9 auto-handled by WAT; add visual archetype in `renderer/creatures/archetypes.js`; add skeleton, slots, clips, expression profile, overlay config in `rig-data.js`; register secondary in `secondaries.js`
-- New creature archetype: add to `archetypes.js` with `skeletonId`/`secondaryId`/`expressionId`, add skeleton + slots + clips in `rig-data.js`, add shape draw function in `draw-canvas.js`, add TYPE_TO_ARCHETYPE mapping
+- New creature archetype: add to `archetypes.js` with `skeletonId`/`secondaryId`/`expressionId`, add skeleton + slots + clips in `rig-data.js`, add pixel draw function in `draw-pixel.js`, add TYPE_TO_ARCHETYPE mapping
 - New creature skin: create SkinDef, call `registerSkin()` in `skins.js` — can override palette, slots, clips, secondary/expression profiles
 - New skinned rigged character: create rig in `content/rigs/`, clips in `content/animations/`, add entity type check in `skinned-entities.js`. See `docs/extending.md`.
 - New animation clip: add to the character's clip file, reference bone names from the rig's skeleton
@@ -270,6 +294,8 @@ Structured experiment and evolutionary training platform built on the Simulation
 - New experiment moment: add MomentDef to `MOMENT_DEFS` in `src/lab/moments.js` or use `registerMoment()`
 - New experiment feature group: add to `FEATURE_GROUPS` in `src/lab/featurizer.js`, bump `FEATURE_SCHEMA_VERSION`
 - New experiment UI panel: add tab in `debug/experiment-lab.html`
+- New lab page panel: create module in `lab/src/panels/` with `{ id, label, create(container), destroy() }`, register in `lab/src/lab-app.js`
+- New archetype progression: create config object based on `PLAYER_PROGRESSION`, call `registerProgressionConfig(archetypeId, config)` in `progression.js`. Preview in studio.
 - See `docs/extending.md` for detailed instructions
 
 ## Test Coverage
@@ -299,7 +325,9 @@ rig controller state machine (spawn→idle→chase→hit→death), clip determin
 ghost witch rig integrity (bone references, skinning output).
 Neural network: feedforward weight count, get/set roundtrip, forward pass determinism,
 ReLU hidden activation, JSON serialization, observation encoding (length, normalization,
-buffer reuse, missing fields), neural policy interface (registration, act shape, custom weights).
+buffer reuse, missing fields), neural policy interface (registration, act shape, custom weights,
+diagnostic data attachment), neural diagnostics (all 7 behavioral classifications, stuck frame
+counting/reset, priority ordering, movement magnitude, output shape).
 Simulation Lab: bot config creation, bias presets, multiple bias layering, direct overrides,
 policy creation from config, serialize/deserialize round-trip, mutation without parent corruption,
 deterministic mutation via RNG, range clamping, reward breakdown structure and totals,
@@ -319,6 +347,14 @@ mutation, population evaluation with mock, random injection, parameter-reward co
 moment-reward correlation, upgrade-reward correlation, candidate dominance analysis,
 convergence/stagnation detection, full population analysis, parent-child comparison with config
 diff, generation winner comparison, rewards with moments component and scale factor.
+Visual Progression: tier computation at milestone boundaries and between milestones,
+high-level cap, intensity asymptotic bounds (never exceeds max, approaches max for
+extreme levels), feature unlock accumulation across tiers, modulation phase wrapping
+(never unbounded), full state determinism for same inputs, level 1 minimal visuals,
+level 10 glow+tendrils, level 30 halo+crown, level 50 all features, intensity/tendril/
+glow/halo bounded at extreme levels, default config for non-player archetypes, XP
+progress smoothing, seed variation, burst state lifecycle (trigger/progress/deactivate/
+reset), config registry (player/default/custom), debug formatting.
 
 ## Maintenance Rule
 

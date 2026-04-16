@@ -191,18 +191,16 @@ export const ARCHETYPES = {
     secondaryId: 'brute',
     expressionId: 'brute',
     body: {
-      shape: 'hulk',        // chunky, angular mass
-      aspectRatio: 1.2,     // wider than tall
+      shape: 'homunculus',   // hunched, oversized arms, small head
+      aspectRatio: 1.3,      // wider than tall
       segments: 8,
-      spikes: 4,            // number of protruding angular bits
-      spikeLength: 0.25,    // spike extension (relative to radius)
     },
     eyes: {
       count: 2,
-      size: 0.14,
-      offset: 0.25,
-      spread: 0.35,
-      style: 'angry',       // angled brow marks above eyes
+      size: 0.11,            // smaller — beady eyes on tiny head
+      offset: 0.2,
+      spread: 0.25,
+      style: 'angry',        // angled brow marks above eyes
     },
     palette: {
       base: [0.6, 0.3, 0.85],       // purple
@@ -212,9 +210,9 @@ export const ARCHETYPES = {
       interior: [0.4, 0.18, 0.6],
     },
     deform: {
-      wobble: { amp: 0.05, freq: 1.5, octaves: 1 },  // minimal wobble — they're solid
-      breathing: { amp: 0.03, freq: 0.6 },
-      squashStretch: { moveFactor: 0.06 },
+      wobble: { amp: 0.03, freq: 1.2, octaves: 1 },  // minimal — solid mass
+      breathing: { amp: 0.02, freq: 0.5 },
+      squashStretch: { moveFactor: 0.04 },
       hit: { flashDuration: 0.2, scalePulse: 0.1 },
       death: { type: 'crumble', duration: 0.6 },
     },
@@ -222,7 +220,6 @@ export const ARCHETYPES = {
       hueShift: [-0.05, 0.05],
       scaleJitter: [0.95, 1.05],
       wobblePhase: [0, 6.28],
-      spikeJitter: [0.7, 1.3],
     },
   },
 };

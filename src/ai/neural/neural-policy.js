@@ -9,28 +9,29 @@ import { createSensors } from '../../systems/player-ai/sensors.js';
 import { createUpgradeStrategy } from '../../systems/player-ai/upgrade-strategy.js';
 import { FeedforwardNetwork } from './feedforward.js';
 import { INPUT_SIZE, encodeObservation } from './encode.js';
+import { createNeuralDiagnostics } from './neural-diagnostics.js';
 
 // Load trained weights at module load time.
-// In browser/Vite: use fetch with import.meta.url resolution.
-// In Node (workers/tests): use fs.readFileSync.
+// Browser: fetch with import.meta.url resolution.
+// Node (workers/tests): fs.readFileSync.
 let TRAINED_WEIGHTS = null;
 try {
-  if (typeof globalThis.document !== 'undefined') {
-    // Browser — resolve relative to this module's URL
-    const url = new URL('./trained-weights.json', import.meta.url).href;
-    const resp = await fetch(url);
-    if (resp.ok) TRAINED_WEIGHTS = await resp.json();
-  } else {
-    // Node
+  if (typeof process !== 'undefined' && process.versions?.node && typeof globalThis.document === 'undefined') {
+    // Node (workers/harnesses)
     const { readFileSync } = await import('fs');
     const { fileURLToPath } = await import('url');
     const { dirname, resolve } = await import('path');
     const dir = dirname(fileURLToPath(import.meta.url));
     const raw = readFileSync(resolve(dir, 'trained-weights.json'), 'utf-8');
     TRAINED_WEIGHTS = JSON.parse(raw);
+  } else {
+    // Browser — resolve relative to this module's URL
+    const url = new URL('./trained-weights.json', import.meta.url).href;
+    const resp = await fetch(url);
+    if (resp.ok) TRAINED_WEIGHTS = await resp.json();
   }
-} catch {
-  // No trained weights available — will use zeros or caller-provided weights
+} catch (e) {
+  console.warn('[neural] Failed to load trained weights:', e?.message || e);
 }
 
 const DEFAULT_TOPOLOGY = [INPUT_SIZE, 32, 16, 4];
@@ -58,6 +59,15 @@ function tanh(x) {
   return Math.tanh(x);
 }
 
+// ── Smoothing constants ──
+const MOVE_SMOOTH = 0.25;          // EMA factor — lower = smoother (0.25 blends 25% new, 75% old)
+const COMMIT_FRAMES = 6;           // minimum frames before allowing sharp direction reversal
+const REVERSAL_THRESHOLD = -0.5;   // dot product below this = sharp reversal
+const AIM_OFFSET_SCALE = Math.PI / 4; // max ±45° aim offset (was full PI)
+const ATTACK_RANGE_GATE = 1.3;     // only attack if nearest enemy < weaponRange * this
+const WALL_REPEL_DIST = 120;       // start pushing away from walls at this distance
+const WALL_REPEL_STRENGTH = 0.6;   // how much wall repulsion overrides network output
+
 /**
  * Create a neural policy.
  * @param {Object} params
@@ -68,6 +78,9 @@ function tanh(x) {
 function createNeuralPolicy(params = {}) {
   // Priority: explicit params.json > explicit params.weights > auto-loaded trained weights
   const hasTrainedWeights = TRAINED_WEIGHTS && TRAINED_WEIGHTS.weights && TRAINED_WEIGHTS.weights.length > 0;
+  if (!params.json && !params.weights && !hasTrainedWeights) {
+    console.warn('[neural] No trained weights available — network will output zeros. Run npm run train first.');
+  }
   const source = params.json || (params.weights ? null : (hasTrainedWeights ? TRAINED_WEIGHTS : null));
   const topology = params.topology || (source?.topology) || DEFAULT_TOPOLOGY;
   const net = source
@@ -84,7 +97,13 @@ function createNeuralPolicy(params = {}) {
 
   const sensors = createSensors();
   const upgrader = createUpgradeStrategy(BRAWLER_UPGRADE_WEIGHTS);
+  const diagnostics = createNeuralDiagnostics();
   const inputBuf = new Float32Array(INPUT_SIZE);
+
+  // Smoothing state
+  let smoothDx = 0;
+  let smoothDy = 0;
+  let commitCounter = 0;   // frames since last direction commitment
 
   return {
     name: 'Neural',
@@ -93,6 +112,10 @@ function createNeuralPolicy(params = {}) {
 
     reset() {
       sensors.reset();
+      diagnostics.reset();
+      smoothDx = 0;
+      smoothDy = 0;
+      commitCounter = 0;
     },
 
     act(obs) {
@@ -101,19 +124,78 @@ function createNeuralPolicy(params = {}) {
 
       const out = net.forward(inputBuf);
 
-      // Map outputs to actions
-      const dx = tanh(out[0]);
-      const dy = tanh(out[1]);
-      const attack = sigmoid(out[2]) > 0.5;
-      const aimOffset = tanh(out[3]) * Math.PI;
+      // ── Raw network outputs ──
+      let rawDx = tanh(out[0]);
+      let rawDy = tanh(out[1]);
+      const attackSignal = sigmoid(out[2]);
+      const aimOffset = tanh(out[3]) * AIM_OFFSET_SCALE;
 
-      // Aim toward nearest enemy + learned offset
+      // ── Wall repulsion ──
+      // Push away from edges so the AI doesn't corner itself
+      const worldW = obs.worldW || 4096;
+      const worldH = obs.worldH || 4096;
+      const px = obs.playerX;
+      const py = obs.playerY;
+
+      if (px < WALL_REPEL_DIST) {
+        const t = 1 - px / WALL_REPEL_DIST; // 0 at threshold, 1 at wall
+        rawDx += t * WALL_REPEL_STRENGTH;
+      } else if (px > worldW - WALL_REPEL_DIST) {
+        const t = 1 - (worldW - px) / WALL_REPEL_DIST;
+        rawDx -= t * WALL_REPEL_STRENGTH;
+      }
+      if (py < WALL_REPEL_DIST) {
+        const t = 1 - py / WALL_REPEL_DIST;
+        rawDy += t * WALL_REPEL_STRENGTH;
+      } else if (py > worldH - WALL_REPEL_DIST) {
+        const t = 1 - (worldH - py) / WALL_REPEL_DIST;
+        rawDy -= t * WALL_REPEL_STRENGTH;
+      }
+
+      // ── Movement smoothing (EMA + commitment) ──
+      // Check for sharp reversals — if committed to a direction, resist flipping
+      const dot = rawDx * smoothDx + rawDy * smoothDy;
+      commitCounter++;
+
+      let targetDx, targetDy;
+      if (commitCounter < COMMIT_FRAMES && dot < REVERSAL_THRESHOLD) {
+        // Still committed to previous direction — dampen the reversal
+        targetDx = smoothDx;
+        targetDy = smoothDy;
+      } else {
+        targetDx = rawDx;
+        targetDy = rawDy;
+        if (dot < REVERSAL_THRESHOLD) {
+          commitCounter = 0; // reset commitment on accepted reversal
+        }
+      }
+
+      // Exponential moving average
+      smoothDx = smoothDx + MOVE_SMOOTH * (targetDx - smoothDx);
+      smoothDy = smoothDy + MOVE_SMOOTH * (targetDy - smoothDy);
+
+      // Normalize if magnitude > 1
+      const mag = Math.sqrt(smoothDx * smoothDx + smoothDy * smoothDy);
+      const dx = mag > 1 ? smoothDx / mag : smoothDx;
+      const dy = mag > 1 ? smoothDy / mag : smoothDy;
+
+      // ── Smart attack gating ──
+      // Only attack when weapon is ready AND enemies are actually in range
+      const weaponReady = sensorData.weaponReady;
+      const nearestDist = sensorData.nearestEnemyDist || Infinity;
+      const weaponRange = sensorData.weaponRange || 100;
+      const enemiesInRange = nearestDist < weaponRange * ATTACK_RANGE_GATE;
+      const attack = attackSignal > 0.5 && weaponReady && enemiesInRange;
+
+      // ── Aim toward nearest enemy + tighter learned offset ──
       const aimAngle = (sensorData.nearestEnemyAngle || 0) + aimOffset;
-      const range = sensorData.weaponRange || 100;
+      const range = weaponRange;
       const targetX = obs.playerX + Math.cos(aimAngle) * range;
       const targetY = obs.playerY + Math.sin(aimAngle) * range;
 
-      return { dx, dy, attack, targetX, targetY };
+      const _neuralDebug = diagnostics.classify(sensorData, out, dx, dy, attack);
+
+      return { dx, dy, attack, targetX, targetY, _neuralDebug };
     },
 
     chooseUpgrade(choices, obs) {

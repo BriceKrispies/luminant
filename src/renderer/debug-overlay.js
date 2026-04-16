@@ -62,9 +62,23 @@ export function createDebugOverlay(element) {
           lines.push(`Action: dx=${(a.dx||0).toFixed(2)} dy=${(a.dy||0).toFixed(2)} atk=${a.attack?'Y':'N'}`);
         }
 
-        // Utility AI debug info
+        // AI debug info
         const ai = data.aiDebug;
-        if (ai) {
+        if (ai && ai.state) {
+          // Neural AI diagnostics
+          lines.push('');
+          lines.push(`Neural: ${ai.state}  stuck:${ai.stuckFrames}`);
+          lines.push(`Move: ${ai.moveMag.toFixed(2)}  Atk: ${ai.rawOutput ? (1 / (1 + Math.exp(-ai.rawOutput[2])) > 0.5 ? 'Y' : 'N') : '?'}`);
+          if (ai.rawOutput) {
+            lines.push(`Raw: [${Array.from(ai.rawOutput).map(v => v.toFixed(2)).join(', ')}]`);
+          }
+          const k = ai.keyInputs;
+          if (k) {
+            lines.push(`HP: ${k.hpRatio.toFixed(2)}  Encircle: ${k.encirclement.toFixed(2)}  Threat: ${k.localThreat.toFixed(1)}`);
+            lines.push(`Near: ${k.nearestEnemyDist.toFixed(0)}  Enemies: ${k.nearEnemyCount}  Edge: ${k.distToEdge.toFixed(0)}`);
+          }
+        } else if (ai && ai.intention) {
+          // Utility AI debug info
           lines.push('');
           lines.push(`Intent: ${ai.intention}`);
           lines.push(`Danger: ${(ai.danger||0).toFixed(2)}  Encircle: ${(ai.encirclement||0).toFixed(2)}`);

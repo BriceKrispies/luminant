@@ -35,7 +35,8 @@
       "Bash(node --input-type=module -e ' *)",
       "Bash(kill 4959)",
       "Bash(kill 5773)",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(node harness/batch-sim.js --runs=1 --policy=neural --seed=100)"
     ]
   }
 }

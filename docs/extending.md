@@ -50,7 +50,7 @@ secondary motion → expression → slot/attachment rendering.
    - `OVERLAY_CONFIGS[id]` — breathing, hover bob, recoil, etc. parameters
 3. Register a secondary motion module in `src/renderer/creatures/secondaries.js`
 4. Add the entity type → archetype mapping in `TYPE_TO_ARCHETYPE`
-5. Add draw functions for any new body/attachment shapes in `draw-canvas.js`
+5. Add a pixel draw function in `draw-pixel.js`
 6. Add tests in `test/creatures.test.js` and `test/rigging.test.js`
 
 ### Adding a New Creature Skin
@@ -63,10 +63,39 @@ Skins allow palette/attachment/clip/profile variations without new archetypes:
    `secondaryId`, `expressionId`, `variation`
 4. The resolver uses `resolveSkin(archetype, skin)` to merge overrides
 
-Existing mappings: basic→slime(blob), fast→ghost(wisp), tank→brute(hulk), ranged→ember(flame).
+Existing mappings: player→player, basic→slime(blob), fast→ghost(wisp), tank→brute(hulk), ranged→ember(flame).
 
 The creature system is shared by both renderers. Canvas 2D draws creatures
 directly; WebGPU draws them on its Canvas 2D overlay canvas.
+
+### Adding Progression Visuals for Another Archetype
+
+The visual progression system (`src/renderer/creatures/progression.js`) derives
+a bounded progression state from entity level. By default, non-player archetypes
+get a minimal default config (glow only, no tendrils/halo).
+
+To add custom progression for an archetype:
+
+1. Create a progression config object based on `PLAYER_PROGRESSION` or
+   `DEFAULT_PROGRESSION` in `progression.js`. Set milestone levels, unlocked
+   features, intensity curve, glow/tendril/halo parameters.
+2. Register it: `registerProgressionConfig('archetype_id', myConfig)`
+3. The creature pipeline automatically picks it up — `creature-model.js`
+   derives progression state and `draw-pixel.js` renders it.
+4. For custom rendering beyond the built-in effects, add draw functions
+   in `progression-visuals.js` and wire them into `drawProgressionEffects()`.
+
+Tuning parameters (all in the config object):
+- `milestones` — array of `{ level, label, unlocks }` milestone definitions
+- `intensityScale` — higher = slower intensity curve growth
+- `glowMaxAlpha`, `glowMaxRadius` — glow caps
+- `tendrilMaxCount`, `tendrilMaxLength` — tendril caps
+- `haloStages`, `haloMaxAlpha` — halo tier caps
+- `modFreqBase`, `hueShiftMax` — infinite modulation tuning
+
+Preview in the studio: `npm run studio`, use the Progression section controls
+to set level, XP progress, seed, and toggle individual features on/off.
+The debug panel shows the full computed progression state.
 
 ## Adding a New Renderer Backend
 
@@ -76,7 +105,7 @@ directly; WebGPU draws them on its Canvas 2D overlay canvas.
    - `name` — human-readable name (e.g. `'WebGL 2'`)
    - `async init()` — acquire context and set up resources
    - `resize()` — handle canvas/viewport resize
-   - `render(snapshot, camera, gameState)` — draw a frame
+   - `render(snapshot, camera)` — draw a frame
    - `dispose()` — release resources and event listeners
 3. Use `validateRenderer(renderer)` from `renderer-interface.js` to verify the contract
 4. Register the backend in `renderer-manager.js`:

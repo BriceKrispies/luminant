@@ -57,20 +57,20 @@ export const SKELETON_DEFS = {
   brute: [
     { name: 'root', parent: null, x: 0, y: 0 },
     { name: 'body', parent: 'root', x: 0, y: 0, tags: 'body' },
-    { name: 'chest', parent: 'body', x: 0, y: -0.15, tags: 'body' },
-    { name: 'head', parent: 'chest', x: 0, y: -0.3, tags: 'face' },
+    { name: 'chest', parent: 'body', x: 0, y: -0.05, tags: 'body' },
+    { name: 'head', parent: 'chest', x: 0, y: -0.10, tags: 'face' },
     { name: 'face_anchor', parent: 'head', x: 0, y: 0, tags: 'face,anchor' },
-    { name: 'jaw_anchor', parent: 'head', x: 0, y: 0.1, tags: 'face,anchor' },
-    { name: 'left_shoulder', parent: 'chest', x: -0.4, y: -0.05, tags: 'body' },
-    { name: 'right_shoulder', parent: 'chest', x: 0.4, y: -0.05, tags: 'body' },
-    { name: 'left_arm', parent: 'left_shoulder', x: -0.2, y: 0.15, tags: 'limb' },
-    { name: 'right_arm', parent: 'right_shoulder', x: 0.2, y: 0.15, tags: 'limb' },
-    { name: 'left_hand', parent: 'left_arm', x: -0.1, y: 0.15, tags: 'limb' },
-    { name: 'right_hand', parent: 'right_arm', x: 0.1, y: 0.15, tags: 'limb' },
-    { name: 'weapon_anchor', parent: 'right_hand', x: 0.15, y: 0, tags: 'anchor' },
-    { name: 'shield_anchor', parent: 'left_hand', x: -0.15, y: 0, tags: 'anchor' },
-    { name: 'back_anchor', parent: 'chest', x: 0, y: 0.15, tags: 'anchor,deformable' },
-    { name: 'fx_anchor', parent: 'body', x: 0, y: -0.5, tags: 'anchor,fx' },
+    { name: 'jaw_anchor', parent: 'head', x: 0, y: 0.04, tags: 'face,anchor' },
+    { name: 'left_shoulder', parent: 'chest', x: -0.35, y: 0.0, tags: 'body' },
+    { name: 'right_shoulder', parent: 'chest', x: 0.35, y: 0.0, tags: 'body' },
+    { name: 'left_arm', parent: 'left_shoulder', x: -0.06, y: 0.10, tags: 'limb' },
+    { name: 'right_arm', parent: 'right_shoulder', x: 0.06, y: 0.10, tags: 'limb' },
+    { name: 'left_hand', parent: 'left_arm', x: -0.03, y: 0.10, tags: 'limb' },
+    { name: 'right_hand', parent: 'right_arm', x: 0.03, y: 0.10, tags: 'limb' },
+    { name: 'weapon_anchor', parent: 'right_hand', x: 0.1, y: 0, tags: 'anchor' },
+    { name: 'shield_anchor', parent: 'left_hand', x: -0.1, y: 0, tags: 'anchor' },
+    { name: 'back_anchor', parent: 'chest', x: 0, y: 0.05, tags: 'anchor,deformable' },
+    { name: 'fx_anchor', parent: 'body', x: 0, y: -0.15, tags: 'anchor,fx' },
   ],
 
   slime: [
@@ -317,10 +317,128 @@ function makeClips(archetypeId) {
   };
 }
 
+function makeBruteClips() {
+  return {
+    idle: createClip('idle', 2.5, true, [
+      createTrack('body', 'rotation', [
+        kf(0, -0.015), kf(0.5, 0.015), kf(1, -0.015),
+      ]),
+      createTrack('body', 'scaleY', [
+        kf(0, 1.01), kf(0.5, 0.99), kf(1, 1.01),
+      ]),
+      // Arms hang and sway gently
+      createTrack('left_arm', 'rotation', [
+        kf(0, 0.04), kf(0.5, -0.04), kf(1, 0.04),
+      ]),
+      createTrack('right_arm', 'rotation', [
+        kf(0, -0.04), kf(0.5, 0.04), kf(1, -0.04),
+      ]),
+      // Hands droop
+      createTrack('left_hand', 'rotation', [
+        kf(0, 0.03), kf(0.5, -0.02), kf(1, 0.03),
+      ]),
+      createTrack('right_hand', 'rotation', [
+        kf(0, -0.03), kf(0.5, 0.02), kf(1, -0.03),
+      ]),
+    ]),
+
+    locomotion: createClip('locomotion', 0.8, true, [
+      // Heavy body bounce — subtle at rootScale 16 (~2px)
+      createTrack('body', 'y', [
+        kf(0, 0), kf(0.25, -0.12), kf(0.5, 0), kf(0.75, -0.06), kf(1, 0),
+      ]),
+      createTrack('body', 'scaleX', [
+        kf(0, 1.03), kf(0.25, 0.98), kf(0.5, 1.03), kf(0.75, 0.98), kf(1, 1.03),
+      ]),
+      createTrack('body', 'scaleY', [
+        kf(0, 0.97), kf(0.25, 1.02), kf(0.5, 0.97), kf(0.75, 1.02), kf(1, 0.97),
+      ]),
+      // Head nods with each step (rotation only — y follows body through hierarchy)
+      createTrack('head', 'rotation', [
+        kf(0, 0.02), kf(0.25, -0.03), kf(0.5, 0.02), kf(0.75, -0.01), kf(1, 0.02),
+      ]),
+      // Shoulders rock via rotation (no y — they follow body through hierarchy)
+      createTrack('left_shoulder', 'rotation', [
+        kf(0, 0.03), kf(0.25, -0.06), kf(0.5, 0.03), kf(0.75, 0.06), kf(1, 0.03),
+      ]),
+      createTrack('right_shoulder', 'rotation', [
+        kf(0, -0.03), kf(0.25, 0.06), kf(0.5, -0.03), kf(0.75, -0.06), kf(1, -0.03),
+      ]),
+      // Arms swing in opposition — big pendulum
+      createTrack('left_arm', 'rotation', [
+        kf(0, -0.25), kf(0.25, 0.25), kf(0.5, -0.25), kf(0.75, 0.25), kf(1, -0.25),
+      ]),
+      createTrack('right_arm', 'rotation', [
+        kf(0, 0.25), kf(0.25, -0.25), kf(0.5, 0.25), kf(0.75, -0.25), kf(1, 0.25),
+      ]),
+      // Hands follow-through with delay
+      createTrack('left_hand', 'rotation', [
+        kf(0, -0.15), kf(0.3, 0.2), kf(0.55, -0.15), kf(0.8, 0.2), kf(1, -0.15),
+      ]),
+      createTrack('right_hand', 'rotation', [
+        kf(0, 0.2), kf(0.3, -0.15), kf(0.55, 0.2), kf(0.8, -0.15), kf(1, 0.2),
+      ]),
+    ]),
+
+    attack: createClip('attack', 0.5, false, [
+      createTrack('body', 'rotation', [
+        kf(0, 0), kf(0.3, -0.12, 'ease-in'), kf(0.5, 0.18, 'ease-out'), kf(1, 0, 'ease-out'),
+      ]),
+      createTrack('body', 'x', [
+        kf(0, 0), kf(0.3, -0.2, 'ease-in'), kf(0.5, 0.4, 'ease-out'), kf(1, 0, 'ease-out'),
+      ]),
+      createTrack('right_arm', 'rotation', [
+        kf(0, 0), kf(0.25, -0.5, 'ease-in'), kf(0.45, 0.6, 'ease-out'), kf(1, 0, 'ease-out'),
+      ]),
+      createTrack('right_hand', 'rotation', [
+        kf(0, 0), kf(0.2, -0.3), kf(0.5, 0.4, 'ease-out'), kf(1, 0),
+      ]),
+    ]),
+
+    hit_react: createClip('hit_react', 0.25, false, [
+      createTrack('body', 'x', [
+        kf(0, 0), kf(0.2, -0.08, 'ease-out'), kf(0.7, 0.03), kf(1, 0, 'ease-out'),
+      ]),
+      createTrack('body', 'scaleX', [
+        kf(0, 1), kf(0.15, 1.06), kf(0.5, 0.98), kf(1, 1),
+      ]),
+      createTrack('body', 'scaleY', [
+        kf(0, 1), kf(0.15, 0.95), kf(0.5, 1.01), kf(1, 1),
+      ]),
+      // Arms flinch inward
+      createTrack('left_arm', 'rotation', [
+        kf(0, 0), kf(0.15, -0.3), kf(1, 0, 'ease-out'),
+      ]),
+      createTrack('right_arm', 'rotation', [
+        kf(0, 0), kf(0.15, 0.3), kf(1, 0, 'ease-out'),
+      ]),
+    ]),
+
+    dying: createClip('dying', 0.6, false, [
+      createTrack('body', 'scaleX', [
+        kf(0, 1), kf(0.3, 1.12, 'ease-out'), kf(1, 0.4, 'ease-in'),
+      ]),
+      createTrack('body', 'scaleY', [
+        kf(0, 1), kf(0.3, 0.88), kf(1, 0.25, 'ease-in'),
+      ]),
+      createTrack('body', 'rotation', [
+        kf(0, 0), kf(1, 0.25),
+      ]),
+      // Arms go limp
+      createTrack('left_arm', 'rotation', [
+        kf(0, 0), kf(0.5, 0.4), kf(1, 0.6),
+      ]),
+      createTrack('right_arm', 'rotation', [
+        kf(0, 0), kf(0.5, -0.4), kf(1, -0.6),
+      ]),
+    ]),
+  };
+}
+
 export const CLIP_DEFS = {
   ghost: makeClips('ghost'),
   ember: makeClips('ember'),
-  brute: makeClips('brute'),
+  brute: makeBruteClips(),
   slime: makeClips('slime'),
   player: makeClips('player'),
 };

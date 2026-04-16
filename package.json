@@ -29,6 +29,7 @@
     "experiment:analyze": "node scripts/build-wat.js && node harness/experiment.js analyze",
     "experiment:compare": "node scripts/build-wat.js && node harness/experiment.js compare",
     "experiment:ui": "node scripts/build-wat.js && vite --open /debug/experiment-lab.html",
+    "lab:page": "node scripts/build-wat.js && vite --open /lab/",
     "studio": "vite --open /studio/",
     "render": "node studio/render.js"
   },

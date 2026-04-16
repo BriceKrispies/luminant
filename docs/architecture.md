@@ -103,16 +103,15 @@ system and are selectable from the menu alongside legacy policies.
 ### Renderer (`src/renderer/`)
 - `renderer-interface.js` — backend contract (id, name, init, resize, render, dispose)
 - `renderer-manager.js` — capability detection, preference persistence, runtime switching
-- `canvas-renderer.js` — Canvas 2D backend (layered drawing)
-- `webgpu-renderer.js` — WebGPU backend (instanced rendering, WGSL shaders)
+- `canvas-renderer.js` — Canvas 2D backend. Renders to a fixed 270p low-res offscreen canvas, then blits up to display with nearest-neighbor scaling for pixel-art look. Integer camera snapping prevents sub-pixel anti-aliasing.
+- `webgpu-renderer.js` — WebGPU backend (instanced rendering, WGSL shaders). Creatures and effects drawn via a separate 270p low-res Canvas 2D overlay with nearest-neighbor upscaling.
 - `renderer.js` — re-export shim for backward compatibility
-- `ground.js` — tiled noise texture ground (Canvas 2D)
+- `ground.js` — pixel-art tiled terrain (16x16 world-unit tiles with stone/dirt pattern, accent details)
 - `fog.js` — screen-space vignette
 - `lights.js` — dynamic colored light pools
 - `entities.js` — player, enemy, projectile, pickup rendering (Canvas 2D)
 - `effects.js` — hit/death/levelup visual effects
-- `ui-render.js` — in-canvas HUD (HP, XP, level, kills), shared by both backends
-- `debug-overlay.js` — FPS/entity/timing debug display
+- `debug-overlay.js` — FPS/entity/timing debug display, AI diagnostics (neural behavioral state or utility intention)
 
 ### Procedural Creatures (`src/renderer/creatures/`)
 
@@ -140,7 +139,7 @@ overlays → secondary motion → expression → slot/attachment rendering.
   pupil bias. Expressions: neutral, angry, surprised, hurt, dead, focused.
 - `skins.js` — Skin/variant separation: skeleton, palette, slot overrides,
   clip overrides, secondary/expression profile IDs.
-- `rig-data.js` — Data definitions for all 4 archetypes: skeleton bone layouts,
+- `rig-data.js` — Data definitions for all 5 archetypes (including player): skeleton bone layouts,
   slot/attachment layouts, animation clips, expression profiles, overlay configs.
 
 **Existing systems (preserved, used as fallback):**
@@ -150,10 +149,22 @@ overlays → secondary motion → expression → slot/attachment rendering.
   hit, death). Still used by skeleton path for body shape wobble.
 - `creature-model.js` — Resolver with dual pipeline: skeleton-based (primary) and
   legacy deformation-based (fallback). Caches per-entity rig runtime instances.
-- `draw-canvas.js` — Canvas 2D drawing with skeleton-based slot/attachment path
-  and legacy shape path. Used by both backends.
+- `draw-pixel.js` — World-space pixel drawing with per-archetype pixel functions
+  (player, slime, ghost, brute, ember). 1 world unit = 1 render pixel. Used by both backends.
+  Draws progression effects (glow, tendrils, halo, burst) via progression-visuals.js.
 
-Entity type → archetype mapping: basic→slime, fast→ghost, tank→brute, ranged→ember.
+**Visual progression system:**
+- `progression.js` — Data-driven progression state derivation from entity level, time,
+  XP progress, and seeded variation. Finite milestone unlocks (glow, tendrils, halo,
+  crown, ascended) plus infinite bounded modulation (pulse, phase, hue drift). Asymptotic
+  intensity curve ensures visuals never grow unbounded. Per-archetype config registry
+  with player-specific and default configs. Level-up burst state tracking.
+- `progression-visuals.js` — Renderer-side progression effect drawing: radial body glow,
+  animated energy tendrils, halo/crown rings, level-up burst particles. All pixel-art
+  scale (1 world-unit pixels). Called by draw-pixel.js in two passes (glow behind body,
+  rest above body). Supports per-feature toggle flags for studio use.
+
+Entity type → archetype mapping: player→player, basic→slime, fast→ghost, tank→brute, ranged→ember.
 Snapshot includes `facing` field for directional rendering.
 
 ### Skeletal Animation Engine (`src/animation/`)

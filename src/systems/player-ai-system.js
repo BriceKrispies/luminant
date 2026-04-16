@@ -53,7 +53,7 @@ export function createPlayerAISystem(engine) {
       this._lastObs = obs;
       this._lastAction = action;
 
-      // Capture debug data from utility-based policies
+      // Capture debug data from policies
       if (action._intention) {
         debugData = {
           intention: action._intention,
@@ -63,6 +63,8 @@ export function createPlayerAISystem(engine) {
           encirclement: action._encirclement,
           preferredRange: action._preferredRange,
         };
+      } else if (action._neuralDebug) {
+        debugData = action._neuralDebug;
       } else {
         debugData = null;
       }

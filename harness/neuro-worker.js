@@ -6,7 +6,7 @@
 
 import { parentPort } from 'worker_threads';
 import { loadEngine } from '../src/engine/loader.js';
-import { runGame } from '../src/ai/game-runner.js';
+import { runGameWithBehavior } from '../src/ai/game-runner.js';
 import { FeedforwardNetwork } from '../src/ai/neural/feedforward.js';
 import { INPUT_SIZE, encodeObservation } from '../src/ai/neural/encode.js';
 
@@ -83,6 +83,52 @@ function responsivenessCheck(genome) {
   return 0;
 }
 
+/**
+ * Compute behavior quality bonus/penalty from tracked behavioral metrics.
+ * Rewards smooth, human-like play. Penalizes jitter, corner-hugging, wasteful attacks.
+ */
+function behaviorScore(behavior, maxTicks) {
+  let bonus = 0;
+  const totalTicks = behavior.totalTicks || 1;
+
+  // ── Jitter penalty: direction reversals per tick ──
+  // A human changes direction ~0.02 times/tick. Above 0.1 looks spastic.
+  const reversalRate = (behavior.directionReversals || 0) / totalTicks;
+  if (reversalRate > 0.1) {
+    bonus -= (reversalRate - 0.1) * 2000; // heavy penalty for extreme jitter
+  } else if (reversalRate < 0.04) {
+    bonus += 50; // small reward for smooth movement
+  }
+
+  // ── Corner time penalty: fraction of time near walls ──
+  const cornerFrac = (behavior.wallFrames || 0) / totalTicks;
+  if (cornerFrac > 0.3) {
+    bonus -= (cornerFrac - 0.3) * 800; // penalize spending >30% of time at walls
+  }
+
+  // ── Wasteful attack penalty: attacks that hit nothing ──
+  const totalAttacks = behavior.totalAttacks || 1;
+  const wastedAttacks = behavior.wastedAttacks || 0;
+  const wasteRate = wastedAttacks / totalAttacks;
+  if (wasteRate > 0.5) {
+    bonus -= (wasteRate - 0.5) * 300; // penalize >50% miss rate
+  }
+
+  // ── Stuck penalty: consecutive frames near-zero movement ──
+  const maxStuckStreak = behavior.maxStuckStreak || 0;
+  if (maxStuckStreak > 60) { // stuck for 1+ seconds
+    bonus -= Math.min(maxStuckStreak - 60, 300) * 2;
+  }
+
+  // ── Center-of-arena bonus: reward staying toward middle ──
+  const avgCenterDist = behavior.avgCenterDist || 0; // 0-1 normalized, 0=center
+  if (avgCenterDist < 0.3) {
+    bonus += 30; // small reward for staying centeredish
+  }
+
+  return bonus;
+}
+
 parentPort.on('message', async (msg) => {
   if (msg.type === 'init') {
     wasm = await loadEngine();
@@ -100,8 +146,9 @@ parentPort.on('message', async (msg) => {
       });
 
       let totalScore = 0;
+      let totalBehaviorBonus = 0;
       for (const seed of seeds) {
-        const result = await runGame({
+        const result = await runGameWithBehavior({
           policy,
           seed,
           maxTicks,
@@ -109,11 +156,15 @@ parentPort.on('message', async (msg) => {
           silent: true,
         });
         totalScore += result.score;
+        if (result.behavior) {
+          totalBehaviorBonus += behaviorScore(result.behavior, maxTicks);
+        }
       }
 
       const avgScore = totalScore / seeds.length;
+      const avgBehavior = totalBehaviorBonus / seeds.length;
       const penalty = responsivenessCheck(genome);
-      parentPort.postMessage({ type: 'result', id, fitness: avgScore + penalty });
+      parentPort.postMessage({ type: 'result', id, fitness: avgScore + avgBehavior + penalty });
     } catch (err) {
       parentPort.postMessage({ type: 'error', id, error: err.message });
     }

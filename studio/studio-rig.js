@@ -16,6 +16,7 @@ import { createSecondary } from '../src/renderer/creatures/secondaries.js';
 import { createExpressionController, detectExpression } from '../src/renderer/creatures/expression.js';
 import { composeDeformations } from '../src/renderer/creatures/deformations.js';
 import { SKELETON_DEFS, SLOT_DEFS, CLIP_DEFS, STATE_CONFIGS, EXPRESSION_PROFILES, OVERLAY_CONFIGS } from '../src/renderer/creatures/rig-data.js';
+import { deriveProgressionState, createBurstState } from '../src/renderer/creatures/progression.js';
 
 // Reverse map: archetype ID → entity type constant
 const ARCHETYPE_TO_TYPE = { player: 1, slime: 2, ghost: 3, brute: 4, ember: 5 };
@@ -89,6 +90,9 @@ export function createStudioRig(archetypeId, entityId = 1) {
   let hitTimer = 0;
   let deathTimer = 0;
 
+  // Progression
+  const burstState = createBurstState();
+
   return {
     archetype,
     skeleton,
@@ -117,6 +121,12 @@ export function createStudioRig(archetypeId, entityId = 1) {
         hitActive = false,
         paused = false,
         scrubTime = null,
+        level = 1,
+        xpProgress = 0,
+        entitySeed = 0,
+        progressionEnabled = true,
+        progressionToggles = null,
+        triggerBurst = false,
       } = opts;
 
       // Hit/death tracking
@@ -226,7 +236,21 @@ export function createStudioRig(archetypeId, entityId = 1) {
       };
       const deform = composeDeformations(entity, time, archetype, variation, animState);
 
-      return {
+      // Progression
+      if (triggerBurst) burstState.trigger();
+      if (!paused) burstState.update(dt);
+
+      const progression = progressionEnabled
+        ? deriveProgressionState({
+            archetypeId,
+            level,
+            time,
+            xpProgress,
+            entitySeed,
+          })
+        : null;
+
+      const result = {
         archetype,
         variation,
         deform,
@@ -235,6 +259,9 @@ export function createStudioRig(archetypeId, entityId = 1) {
         resolvedSlots,
         expressionParams,
         animState: animController.state,
+        progression,
+        burstState: progressionEnabled ? burstState : null,
+        progressionToggles,
         x: entity.x,
         y: entity.y,
         radius: entity.radius,
@@ -244,6 +271,8 @@ export function createStudioRig(archetypeId, entityId = 1) {
         entityState: entity.state,
         useSkeleton: true,
       };
+      this._lastModel = result;
+      return result;
     },
 
     /** Reset animation and expression state */

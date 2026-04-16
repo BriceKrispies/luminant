@@ -1,0 +1,377 @@
+/* ══════════════════════════════════════════════════════
+   Luminant Lab — Layered CSS
+   Tokens → Layout → Components → Panels
+   ══════════════════════════════════════════════════════ */
+
+/* ── Layer 1: Design Tokens ── */
+:root {
+  --lab-bg: #0a0a12;
+  --lab-surface: #12121e;
+  --lab-surface-raised: #1a1a2a;
+  --lab-border: rgba(100, 180, 255, 0.1);
+  --lab-border-bright: rgba(100, 180, 255, 0.25);
+  --lab-text: #8a8f9a;
+  --lab-text-bright: #d0d4dc;
+  --lab-text-dim: #555a66;
+  --lab-accent: #5a9cf5;
+  --lab-accent-dim: rgba(90, 156, 245, 0.15);
+  --lab-danger: #e44444;
+  --lab-success: #44c466;
+  --lab-warning: #e4a844;
+  --lab-radius: 6px;
+  --lab-radius-sm: 4px;
+  --lab-gap: 12px;
+  --lab-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --lab-font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ── Layer 2: Reset & Base ── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--lab-bg);
+  font-family: var(--lab-font);
+  color: var(--lab-text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* ── Layer 3: Layout ── */
+#lab-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.lab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 44px;
+  min-height: 44px;
+  background: var(--lab-surface);
+  border-bottom: 1px solid var(--lab-border);
+  user-select: none;
+}
+
+.lab-header__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.lab-header__home {
+  color: var(--lab-text-dim);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.lab-header__home:hover {
+  color: var(--lab-accent);
+}
+
+.lab-header__sep {
+  color: var(--lab-text-dim);
+  font-weight: 300;
+}
+
+.lab-header__name {
+  color: var(--lab-text-bright);
+}
+
+.lab-header__nav {
+  display: flex;
+  gap: 2px;
+}
+
+.lab-nav-btn {
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--lab-radius-sm);
+  color: var(--lab-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lab-nav-btn:hover {
+  background: var(--lab-accent-dim);
+  color: var(--lab-text-bright);
+}
+.lab-nav-btn.active {
+  background: var(--lab-accent-dim);
+  color: var(--lab-accent);
+}
+
+.lab-main {
+  flex: 1;
+  overflow: auto;
+  padding: var(--lab-gap);
+}
+
+/* ── Layer 4: Components — Controls Bar ── */
+.sim-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--lab-surface);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius);
+  margin-bottom: var(--lab-gap);
+  flex-wrap: wrap;
+}
+
+.sim-controls__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-controls__label {
+  font-size: 12px;
+  color: var(--lab-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sim-controls__select {
+  padding: 4px 8px;
+  background: var(--lab-surface-raised);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-sm);
+  color: var(--lab-text-bright);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sim-controls__select:focus {
+  outline: 1px solid var(--lab-accent);
+  outline-offset: -1px;
+}
+
+.sim-controls__btn {
+  padding: 5px 12px;
+  background: var(--lab-accent-dim);
+  border: 1px solid var(--lab-border-bright);
+  border-radius: var(--lab-radius-sm);
+  color: var(--lab-accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sim-controls__btn:hover {
+  background: rgba(90, 156, 245, 0.25);
+  border-color: var(--lab-accent);
+}
+.sim-controls__btn--danger {
+  color: var(--lab-danger);
+  border-color: rgba(228, 68, 68, 0.2);
+  background: rgba(228, 68, 68, 0.08);
+}
+.sim-controls__btn--danger:hover {
+  background: rgba(228, 68, 68, 0.18);
+  border-color: var(--lab-danger);
+}
+
+.sim-controls__speed-btn {
+  padding: 4px 8px;
+  background: none;
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-sm);
+  color: var(--lab-text);
+  font: inherit;
+  font-size: 12px;
+  font-family: var(--lab-font-mono);
+  cursor: pointer;
+  min-width: 32px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sim-controls__speed-btn:hover {
+  background: var(--lab-accent-dim);
+}
+.sim-controls__speed-btn.active {
+  background: var(--lab-accent-dim);
+  color: var(--lab-accent);
+  border-color: var(--lab-accent);
+}
+
+.sim-controls__count {
+  font-size: 12px;
+  color: var(--lab-text-dim);
+  font-family: var(--lab-font-mono);
+  margin-left: auto;
+}
+
+/* ── Layer 4: Components — Sim Tile ── */
+.sim-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--lab-gap);
+}
+
+.sim-tile {
+  position: relative;
+  background: var(--lab-surface);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.sim-tile:hover {
+  border-color: var(--lab-border-bright);
+}
+.sim-tile.sim-tile--dead {
+  opacity: 0.65;
+}
+
+.sim-tile__canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  image-rendering: pixelated;
+  background: #0a0a0e;
+}
+
+.sim-tile__overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+.sim-tile__policy {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lab-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sim-tile__status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sim-tile__status--alive {
+  color: var(--lab-success);
+}
+.sim-tile__status--dead {
+  color: var(--lab-danger);
+}
+
+.sim-tile__stats {
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--lab-surface);
+  border-top: 1px solid var(--lab-border);
+  font-size: 11px;
+  font-family: var(--lab-font-mono);
+}
+
+.sim-tile__stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--lab-text);
+}
+
+.sim-tile__stat-label {
+  color: var(--lab-text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.sim-tile__stat-value {
+  color: var(--lab-text-bright);
+}
+
+.sim-tile__close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  color: var(--lab-text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.sim-tile:hover .sim-tile__close {
+  opacity: 1;
+}
+.sim-tile__close:hover {
+  color: var(--lab-danger);
+}
+
+/* ── Layer 5: Panels — Gallery ── */
+.gallery-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.gallery-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--lab-text-dim);
+  text-align: center;
+}
+
+.gallery-panel__empty-title {
+  font-size: 16px;
+  color: var(--lab-text);
+}
+
+.gallery-panel__empty-hint {
+  font-size: 13px;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--lab-border-bright);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lab-accent);
+}

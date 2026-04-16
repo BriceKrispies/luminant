@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Creature Studio</title>
   <style>
+    :root {
+      --studio-font: 'Segoe UI', system-ui, sans-serif;
+      --studio-accent: #5a8abf;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: var(--studio-font);
       background: #111;
       color: #ccc;
       display: flex;
@@ -15,7 +19,8 @@
       overflow: hidden;
     }
 
-    #canvas-area {
+    /* ── Viewport ── */
+    #viewport {
       flex: 1;
       display: flex;
       align-items: center;
@@ -23,243 +28,162 @@
       background: #0a0a0e;
       position: relative;
     }
-    #creature-canvas {
+    #canvas {
       image-rendering: pixelated;
+      cursor: default;
     }
-    #canvas-info {
+    #viewport-info {
       position: absolute;
-      bottom: 8px;
-      left: 12px;
-      font-size: 11px;
-      color: #555;
+      bottom: 8px; left: 12px;
+      font-size: 11px; color: #555;
     }
+    #viewport-zoom {
+      position: absolute;
+      top: 10px; right: 10px;
+      font-size: 11px; color: #666;
+      background: rgba(0,0,0,0.5);
+      padding: 3px 8px; border-radius: 3px;
+      pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #viewport-zoom.visible { opacity: 1; }
 
-    #panel {
-      width: 320px;
+    /* ── Inspector panel ── */
+    #inspector {
+      width: 300px;
       background: #1a1a1e;
       border-left: 1px solid #333;
       overflow-y: auto;
-      padding: 16px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-    }
-
-    .section {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .section-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #888;
-      margin-bottom: 2px;
-    }
-    .btn-row {
-      display: flex;
       gap: 4px;
-      flex-wrap: wrap;
     }
-    .btn {
-      padding: 5px 10px;
-      background: #2a2a30;
-      border: 1px solid #444;
-      border-radius: 4px;
-      color: #ccc;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.1s;
-    }
-    .btn:hover { background: #3a3a42; border-color: #666; }
-    .btn.active { background: #3a5a8a; border-color: #5a8abf; color: #fff; }
-    .btn.accent { background: #5a3a2a; border-color: #8a5a3a; }
-    .btn.accent:hover { background: #6a4a3a; }
-
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .slider-row label {
-      font-size: 12px;
-      width: 80px;
-      flex-shrink: 0;
-    }
-    .slider-row input[type="range"] {
-      flex: 1;
-      accent-color: #5a8abf;
-    }
-    .slider-row .value {
-      font-size: 11px;
-      color: #888;
-      width: 40px;
-      text-align: right;
+    #inspector::-webkit-scrollbar       { width: 6px; }
+    #inspector::-webkit-scrollbar-track { background: transparent; }
+    #inspector::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    #inspector > h1 {
+      font-size: 14px; font-weight: 700;
+      color: #eee; padding: 4px 2px 6px;
     }
 
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
+    /* ── Light-DOM helpers (inside panels via slot) ── */
+    .section-label {
+      display: block;
+      font: 600 10px/1 var(--studio-font);
+      text-transform: uppercase; letter-spacing: 0.4px;
+      color: #666; margin: 4px 0 2px;
     }
-    .toggle-row input[type="checkbox"] {
-      accent-color: #5a8abf;
+    .action-row {
+      display: flex; gap: 3px; flex-wrap: wrap;
     }
-
-    hr { border: none; border-top: 1px solid #333; }
+    .action-btn {
+      padding: 4px 8px;
+      background: #2a2a30; border: 1px solid #444; border-radius: 3px;
+      color: #ccc; font: 11px var(--studio-font);
+      cursor: pointer; transition: all 0.1s;
+    }
+    .action-btn:hover { background: #3a3a42; border-color: #666; }
+    .action-btn[aria-pressed="true"] {
+      background: #3a5a8a; border-color: #5a8abf; color: #fff;
+    }
+    .action-btn.accent { background: #5a3a2a; border-color: #8a5a3a; }
+    .action-btn.accent:hover { background: #6a4a3a; }
+    #prog-output {
+      font-size: 9px; color: #777; line-height: 1.3;
+      white-space: pre-wrap;
+      background: #111; padding: 6px; border-radius: 3px;
+      max-height: 160px; overflow-y: auto;
+    }
   </style>
 </head>
 <body>
-  <div id="canvas-area">
-    <canvas id="creature-canvas" width="600" height="600"></canvas>
-    <div id="canvas-info">--</div>
+  <!-- Viewport -->
+  <div id="viewport">
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <output id="viewport-info">--</output>
+    <output id="viewport-zoom">5x</output>
   </div>
 
-  <div id="panel">
-    <div style="font-size: 16px; font-weight: 700; color: #eee;">Creature Studio</div>
+  <!-- Inspector -->
+  <aside id="inspector">
+    <h1>Creature Studio</h1>
 
-    <div class="section">
-      <div class="section-title">Archetype</div>
-      <div class="btn-row" id="archetype-btns">
-        <!-- populated from ARCHETYPES by studio.js -->
-      </div>
-    </div>
+    <!-- Creature -->
+    <studio-panel label="Creature">
+      <studio-select  name="archetypeId" label="Archetype"></studio-select>
+      <studio-slider  name="radius"     label="Radius"  min="6" max="40" value="14" format="0"></studio-slider>
+      <studio-slider  name="hpFraction" label="HP"       min="0" max="1" step="0.05" value="1" format="%"></studio-slider>
+      <studio-slider  name="facing"     label="Facing"   min="0" max="6.28" step="0.05" value="0" format="2"></studio-slider>
+      <studio-select  name="expression" label="Expression">
+        <option value="neutral" selected>Neutral</option>
+        <option value="angry">Angry</option>
+        <option value="surprised">Surprised</option>
+        <option value="hurt">Hurt</option>
+        <option value="dead">Dead</option>
+        <option value="focused">Focused</option>
+      </studio-select>
+      <studio-toggle  name="autoExpression" label="Auto-detect from anim" checked></studio-toggle>
+      <studio-slider  name="pupilX" label="Pupil X" min="-1" max="1" step="0.05" value="0" format="2"></studio-slider>
+      <studio-slider  name="pupilY" label="Pupil Y" min="-1" max="1" step="0.05" value="0" format="2"></studio-slider>
+    </studio-panel>
 
-    <div class="section">
-      <div class="section-title">Animation State</div>
-      <div class="btn-row" id="anim-btns">
-        <button class="btn active" data-id="idle">Idle</button>
-        <button class="btn" data-id="locomotion">Move</button>
-        <button class="btn" data-id="attack">Attack</button>
-        <button class="btn" data-id="hit_react">Hit</button>
-        <button class="btn" data-id="dying">Die</button>
+    <!-- Animation -->
+    <studio-panel label="Animation">
+      <studio-select name="animState" label="State">
+        <option value="idle" selected>Idle</option>
+        <option value="locomotion">Move</option>
+        <option value="attack">Attack</option>
+        <option value="hit_react">Hit</option>
+        <option value="dying">Die</option>
+      </studio-select>
+      <studio-toggle name="loopOneShot" label="Loop one-shots" checked></studio-toggle>
+      <span class="section-label">Playback</span>
+      <div class="action-row" id="playback-actions">
+        <button class="action-btn" data-action="play" aria-pressed="true">Play</button>
+        <button class="action-btn" data-action="pause" aria-pressed="false">Pause</button>
+        <button class="action-btn accent" data-action="replay">Replay</button>
       </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="loop-oneshot" checked>
-        <label for="loop-oneshot">Loop one-shot animations</label>
-      </div>
-    </div>
+      <studio-slider name="speed" label="Speed" min="0" max="3" step="0.1" value="1" format="1|x"></studio-slider>
+      <studio-slider name="scrub" label="Scrub" min="0" max="1" step="0.005" value="0" format="%" disabled></studio-slider>
+      <studio-toggle name="showAll" label="Show all side-by-side"></studio-toggle>
+    </studio-panel>
 
-    <div class="section">
-      <div class="section-title">Playback</div>
-      <div class="btn-row">
-        <button class="btn active" id="play-btn">Play</button>
-        <button class="btn" id="pause-btn">Pause</button>
-        <button class="btn accent" id="replay-btn">Replay</button>
-      </div>
-      <div class="slider-row">
-        <label>Speed</label>
-        <input type="range" id="speed-slider" min="0" max="3" step="0.1" value="1">
-        <span class="value" id="speed-val">1.0x</span>
-      </div>
-      <div class="slider-row">
-        <label>Scrub</label>
-        <input type="range" id="scrub-slider" min="0" max="1" step="0.005" value="0" disabled>
-        <span class="value" id="scrub-val">0%</span>
-      </div>
-    </div>
+    <!-- View & Debug -->
+    <studio-panel label="View & Debug">
+      <studio-slider name="zoom" label="Zoom" min="1" max="20" step="0.5" value="5" format="x"></studio-slider>
+      <studio-select name="bg" label="Background">
+        <option value="dark" selected>Dark</option>
+        <option value="light">Light</option>
+        <option value="checker">Checker</option>
+        <option value="game">Game</option>
+      </studio-select>
+      <span class="section-label">Overlays</span>
+      <studio-toggle name="showBones" label="Bones"></studio-toggle>
+      <studio-toggle name="showNames" label="Bone names"></studio-toggle>
+      <studio-toggle name="showSlots" label="Slot order"></studio-toggle>
+      <studio-toggle name="showGrid"  label="Origin grid"></studio-toggle>
+      <studio-bone-list name="boneVisibility" hidden></studio-bone-list>
+    </studio-panel>
 
-    <hr>
-
-    <div class="section">
-      <div class="section-title">Expression</div>
-      <div class="btn-row" id="expr-btns">
-        <button class="btn active" data-id="neutral">Neutral</button>
-        <button class="btn" data-id="angry">Angry</button>
-        <button class="btn" data-id="surprised">Surprised</button>
-        <button class="btn" data-id="hurt">Hurt</button>
-        <button class="btn" data-id="dead">Dead</button>
-        <button class="btn" data-id="focused">Focused</button>
+    <!-- Progression -->
+    <studio-panel label="Progression">
+      <studio-toggle name="progEnabled" label="Enable progression" checked></studio-toggle>
+      <studio-slider name="level"      label="Level"       min="1" max="60" value="1" format="0"></studio-slider>
+      <studio-slider name="xpProgress" label="XP Progress" min="0" max="1" step="0.01" value="0" format="%"></studio-slider>
+      <studio-slider name="entitySeed" label="Seed"        min="0" max="1" step="0.01" value="0.5" format="2"></studio-slider>
+      <div class="action-row">
+        <button class="action-btn accent" data-action="burst">Trigger Burst</button>
       </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="auto-expression" checked>
-        <label for="auto-expression">Auto-detect from anim state</label>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Pupil Bias</div>
-      <div class="slider-row">
-        <label>X</label>
-        <input type="range" id="pupil-x" min="-1" max="1" step="0.05" value="0">
-        <span class="value" id="pupil-x-val">0</span>
-      </div>
-      <div class="slider-row">
-        <label>Y</label>
-        <input type="range" id="pupil-y" min="-1" max="1" step="0.05" value="0">
-        <span class="value" id="pupil-y-val">0</span>
-      </div>
-    </div>
-
-    <hr>
-
-    <div class="section">
-      <div class="section-title">Entity</div>
-      <div class="slider-row">
-        <label>Radius</label>
-        <input type="range" id="radius-slider" min="6" max="40" step="1" value="14">
-        <span class="value" id="radius-val">14</span>
-      </div>
-      <div class="slider-row">
-        <label>HP</label>
-        <input type="range" id="hp-slider" min="0" max="1" step="0.05" value="1">
-        <span class="value" id="hp-val">100%</span>
-      </div>
-      <div class="slider-row">
-        <label>Facing</label>
-        <input type="range" id="facing-slider" min="0" max="6.28" step="0.05" value="0">
-        <span class="value" id="facing-val">0</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">View</div>
-      <div class="slider-row">
-        <label>Zoom</label>
-        <input type="range" id="zoom-slider" min="1" max="12" step="0.5" value="5">
-        <span class="value" id="zoom-val">5x</span>
-      </div>
-      <div class="btn-row" id="bg-btns">
-        <button class="btn active" data-id="dark">Dark</button>
-        <button class="btn" data-id="light">Light</button>
-        <button class="btn" data-id="checker">Checker</button>
-        <button class="btn" data-id="game">Game</button>
-      </div>
-    </div>
-
-    <hr>
-
-    <div class="section">
-      <div class="section-title">Debug</div>
-      <div class="toggle-row">
-        <input type="checkbox" id="show-bones">
-        <label for="show-bones">Show bones</label>
-      </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="show-names">
-        <label for="show-names">Show bone names</label>
-      </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="show-slots">
-        <label for="show-slots">Show slot order</label>
-      </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="show-grid">
-        <label for="show-grid">Show origin grid</label>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">All Archetypes</div>
-      <div class="toggle-row">
-        <input type="checkbox" id="show-all">
-        <label for="show-all">Show all side-by-side</label>
-      </div>
-    </div>
-  </div>
+      <span class="section-label">Effect Toggles</span>
+      <studio-toggle name="progGlow"     label="Glow" checked></studio-toggle>
+      <studio-toggle name="progTendrils" label="Tendrils" checked></studio-toggle>
+      <studio-toggle name="progHalo"     label="Halo / Crown" checked></studio-toggle>
+      <studio-toggle name="progBurst"    label="Level-up Burst" checked></studio-toggle>
+      <span class="section-label">Debug</span>
+      <pre id="prog-output">--</pre>
+    </studio-panel>
+  </aside>
 
   <script type="module" src="./studio.js"></script>
 </body>

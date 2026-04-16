@@ -28,10 +28,12 @@ export function createClock(fixedDt = 1 / 60, maxStepsPerFrame = 5) {
       freezeFrames += frames;
     },
 
-    /** Call once at start to sync the clock. */
+    /** Call once at start to sync the clock. Resets game time. */
     start() {
       lastRealTime = performance.now() / 1000;
       accumulator = 0;
+      totalTime = 0;
+      frameCount = 0;
     },
 
     /**

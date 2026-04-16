@@ -24,6 +24,7 @@ import { breathingOverlay, hoverBobOverlay, recoilOverlay, tensionOverlay, headL
 import { createSecondary } from './secondaries.js';
 import { createExpressionController, detectExpression } from './expression.js';
 import { SKELETON_DEFS, SLOT_DEFS, CLIP_DEFS, STATE_CONFIGS, EXPRESSION_PROFILES, OVERLAY_CONFIGS } from './rig-data.js';
+import { deriveProgressionState, createBurstState } from './progression.js';
 
 const TAU = Math.PI * 2;
 
@@ -37,6 +38,8 @@ export function createCreatureResolver() {
   const hitState = new Map();
   const deathState = new Map();
   const rigCache = new Map(); // entityId → rig runtime instance
+  const burstCache = new Map(); // entityId → burst state
+  const levelCache = new Map(); // entityId → last known level
 
   // Per-archetype shared skeleton/slot layout (created once per archetype)
   const skeletonCache = {};
@@ -179,7 +182,7 @@ export function createCreatureResolver() {
 
       // Try skeleton-based pipeline
       let rig = rigCache.get(entity.id);
-      if (rig === undefined) {
+      if (rig === undefined || (rig && rig.skeleton.id !== archetype.id)) {
         rig = createRig(archetype, entity.id);
         rigCache.set(entity.id, rig); // null if no skeleton — use legacy
       }
@@ -291,6 +294,31 @@ export function createCreatureResolver() {
       // Legacy deformation for body shape wobble (still used by draw layer)
       const deform = composeDeformations(entity, time, archetype, variation, _animState);
 
+      // Progression state
+      const entityLevel = entity.level || 1;
+      const entityXpProgress = entity.xpProgress || 0;
+
+      // Detect level-up for burst
+      let burst = burstCache.get(entity.id);
+      if (!burst) {
+        burst = createBurstState();
+        burstCache.set(entity.id, burst);
+      }
+      const prevLevel = levelCache.get(entity.id) || entityLevel;
+      if (entityLevel > prevLevel) {
+        burst.trigger();
+      }
+      levelCache.set(entity.id, entityLevel);
+      burst.update(dt);
+
+      const progression = deriveProgressionState({
+        archetypeId: archetype.id,
+        level: entityLevel,
+        time,
+        xpProgress: entityXpProgress,
+        entitySeed: variation.wobblePhase / (Math.PI * 2),
+      });
+
       return {
         archetype,
         variation,
@@ -301,6 +329,9 @@ export function createCreatureResolver() {
         resolvedSlots,
         expressionParams,
         animState: animController.state,
+        // Progression
+        progression,
+        burstState: burst,
         // Position
         x: entity.x,
         y: entity.y,
@@ -321,10 +352,34 @@ export function createCreatureResolver() {
     _resolveLegacy(entity, archetype, variation, time, dt, facing, ds) {
       const deform = composeDeformations(entity, time, archetype, variation, _animState);
 
+      // Progression state (same as rig path)
+      const entityLevel = entity.level || 1;
+      const entityXpProgress = entity.xpProgress || 0;
+
+      let burst = burstCache.get(entity.id);
+      if (!burst) {
+        burst = createBurstState();
+        burstCache.set(entity.id, burst);
+      }
+      const prevLevel = levelCache.get(entity.id) || entityLevel;
+      if (entityLevel > prevLevel) burst.trigger();
+      levelCache.set(entity.id, entityLevel);
+      burst.update(dt);
+
+      const progression = deriveProgressionState({
+        archetypeId: archetype.id,
+        level: entityLevel,
+        time,
+        xpProgress: entityXpProgress,
+        entitySeed: variation.wobblePhase / (Math.PI * 2),
+      });
+
       return {
         archetype,
         variation,
         deform,
+        progression,
+        burstState: burst,
         x: entity.x,
         y: entity.y + deform.yOffset,
         radius: entity.radius,
@@ -347,6 +402,8 @@ export function createCreatureResolver() {
             hitState.delete(id);
             deathState.delete(id);
             rigCache.delete(id);
+            burstCache.delete(id);
+            levelCache.delete(id);
           }
         }
       }
@@ -358,6 +415,8 @@ export function createCreatureResolver() {
       hitState.clear();
       deathState.clear();
       rigCache.clear();
+      burstCache.clear();
+      levelCache.clear();
     },
   };
 }

@@ -255,4 +255,37 @@ describe('Neural policy interface', () => {
 
     expect(typeof action.dx).toBe('number');
   });
+
+  it('act returns _neuralDebug diagnostic data', async () => {
+    const { createPolicy } = await import('../src/ai/policy-types.js');
+    const policy = createPolicy('neural');
+    policy.reset();
+
+    const action = policy.act({
+      playerX: 2048, playerY: 2048,
+      playerHP: 100, playerMaxHP: 100,
+      hpRatio: 1, level: 1, xp: 0, xpToNext: 100, xpRatio: 0,
+      weapon: 'sword', weaponReady: true, weaponCooldownRatio: 0,
+      weaponRange: 80, enemiesInArc: 0,
+      nearEnemyCount: 0, midEnemyCount: 0, farEnemyCount: 0,
+      sectorDensity: [0, 0, 0, 0, 0, 0, 0, 0],
+      sectorThreat: [0, 0, 0, 0, 0, 0, 0, 0],
+      nearestEnemyDist: 500, nearestEnemyAngle: 0,
+      nearestEnemyX: 2548, nearestEnemyY: 2048,
+      nearestPickupDist: 500, nearestPickupAngle: 0,
+      nearestPickupX: 2048, nearestPickupY: 2548,
+      recentDamageTaken: 0, gameTime: 0, wave: 0,
+      totalKills: 0, totalEnemies: 0,
+      worldW: 4096, worldH: 4096, distToEdge: 2048,
+      safestDirX: 1, safestDirY: 0,
+      acquiredUpgrades: [], activeEffects: [],
+    });
+
+    expect(action._neuralDebug).toBeDefined();
+    expect(typeof action._neuralDebug.state).toBe('string');
+    expect(typeof action._neuralDebug.stuckFrames).toBe('number');
+    expect(typeof action._neuralDebug.moveMag).toBe('number');
+    expect(action._neuralDebug.rawOutput).toBeDefined();
+    expect(action._neuralDebug.keyInputs).toBeDefined();
+  });
 });

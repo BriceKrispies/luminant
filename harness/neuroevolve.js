@@ -252,7 +252,7 @@ async function run() {
       `(${genTime}s)`
     );
 
-    // Selection + mutation
+    // Selection + mutation with decaying mutation scale
     const newPop = [];
 
     // Keep elites unchanged
@@ -260,16 +260,22 @@ async function run() {
       newPop.push(new Float32Array(population[indexed[i].index]));
     }
 
+    // Mutation scale decays over training — big exploration early, fine-tuning late
+    const decayProgress = Math.min(gen / GENS, 1);
+    const currentMutScale = MUT_SCALE * (0.3 + 0.7 * (1 - decayProgress)); // decays to 30% of initial
+
     // Fill rest by mutating random elites
+    // Inject random genomes more aggressively to escape local optima
+    const INJECT_INTERVAL = 5;
+    const INJECT_COUNT = Math.max(2, Math.ceil(POP * 0.06)); // ~6% of pop
     while (newPop.length < POP) {
-      // Every 10 gens, inject 2 fully random genomes to escape local optima
-      if (gen > 0 && gen % 10 === 0 && newPop.length >= POP - 2) {
+      if (gen > 0 && gen % INJECT_INTERVAL === 0 && newPop.length >= POP - INJECT_COUNT) {
         newPop.push(randomGenome(rng, genomeSize));
         continue;
       }
       const parentIdx = Math.floor(rng() * eliteCount);
       const parent = newPop[parentIdx];
-      newPop.push(mutateGenome(parent, MUT_RATE, MUT_SCALE, rng));
+      newPop.push(mutateGenome(parent, MUT_RATE, currentMutScale, rng));
     }
 
     population = newPop;
