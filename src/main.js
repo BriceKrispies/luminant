@@ -151,6 +151,7 @@ async function main() {
   let playing = false;
   let gameOver = false;
   let adrenalineActive = false;
+  let lastEnemyCount = 0;
 
   const timings = {
     stepMs: 0, gridMs: 0, playerMs: 0, enemiesMs: 0,
@@ -360,11 +361,8 @@ async function main() {
       feedback.update(dt);
       updateEffects(dt);
 
-      // Snapshot — created before director so we can reuse its enemy count
-      const snapshot = createSnapshot(engine);
-
-      // Director + elites — use snapshot.enemyCount instead of rescanning
-      director.update(dt, pp.x, pp.y, snapshot.enemyCount);
+      // Director + elites — use snapshot enemy count from last frame to avoid rescanning
+      director.update(dt, pp.x, pp.y, lastEnemyCount);
       elites.update(dt, pp.x, pp.y, director.gameTime);
 
       // Camera
@@ -397,6 +395,8 @@ async function main() {
 
     // Render
     if (steps.length > 0 || true) {
+      const snapshot = createSnapshot(engine);
+      lastEnemyCount = snapshot.enemyCount;
       // Attach player level/XP to snapshot so renderer can drive progression visuals
       if (snapshot.player) {
         snapshot.player.level = xpSystem.level;

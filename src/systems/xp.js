@@ -47,9 +47,12 @@ export function createXPSystem(engine, deps = {}) {
       let xpGained = 0;
       const toRemove = [];
       const deadEnemies = [];
+      const playerId = engine.getPlayerId();
 
       engine.forEachEntity((id, type, state) => {
         if (state !== STATE.DYING) return;
+        // Never despawn the player — death is handled by the main loop's isAlive() check
+        if (id === playerId) return;
 
         if (type >= 2 && type <= 9) {
           const ex = engine.getEntityX(id);
