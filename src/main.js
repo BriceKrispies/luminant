@@ -360,9 +360,11 @@ async function main() {
       feedback.update(dt);
       updateEffects(dt);
 
-      // Director + elites
-      const enemyCount = engine.countByType(2, 9);
-      director.update(dt, pp.x, pp.y, enemyCount);
+      // Snapshot — created before director so we can reuse its enemy count
+      const snapshot = createSnapshot(engine);
+
+      // Director + elites — use snapshot.enemyCount instead of rescanning
+      director.update(dt, pp.x, pp.y, snapshot.enemyCount);
       elites.update(dt, pp.x, pp.y, director.gameTime);
 
       // Camera
@@ -395,7 +397,6 @@ async function main() {
 
     // Render
     if (steps.length > 0 || true) {
-      const snapshot = createSnapshot(engine);
       // Attach player level/XP to snapshot so renderer can drive progression visuals
       if (snapshot.player) {
         snapshot.player.level = xpSystem.level;

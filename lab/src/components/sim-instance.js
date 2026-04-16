@@ -94,6 +94,7 @@ export async function createSimInstance(config = {}) {
   let prevHP = player.getMaxHP();
   let adrenalineActive = false;
   let tickCount = 0;
+  let cachedEnemyCount = 0;
 
   function tick() {
     if (!alive) return;
@@ -188,9 +189,8 @@ export async function createSimInstance(config = {}) {
 
       cooldowns.update(DT);
 
-      // Director + elites
-      const enemyCount = engine.countByType(2, 9);
-      director.update(DT, pp.x, pp.y, enemyCount);
+      // Director + elites — use cached count from last snapshot to avoid rescanning
+      director.update(DT, pp.x, pp.y, cachedEnemyCount);
       elites.update(DT, pp.x, pp.y, director.gameTime);
 
       // Camera
@@ -229,6 +229,7 @@ export async function createSimInstance(config = {}) {
 
   function render() {
     const snapshot = createSnapshot(engine);
+    cachedEnemyCount = snapshot.enemyCount;
     if (snapshot.player) {
       snapshot.player.level = xpSystem.level;
       snapshot.player.xpProgress = xpSystem.xpToNext > 0 ? xpSystem.xp / xpSystem.xpToNext : 0;
