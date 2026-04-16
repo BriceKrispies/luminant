@@ -64,12 +64,12 @@ export function createDirectorSystem(engine, spawner) {
 
       const params = getInterpolated();
 
-      // After phase 4 ends (420s+), keep escalating but cap entity count
+      // After phase 4 ends (420s+), keep escalating infinitely
       if (gameTime > 420) {
         const overtime = gameTime - 420;
-        params.maxConcurrent = Math.min(400, Math.round(500 + overtime * 2));
-        params.spawnInterval = Math.max(0.15, 0.3 - overtime * 0.0005);
-        params.spawnBatch = Math.min(12, Math.round(16 + overtime * 0.1));
+        params.maxConcurrent = Math.round(500 + overtime * 2);
+        params.spawnInterval = Math.max(0.05, 0.1 - overtime * 0.0005);
+        params.spawnBatch = Math.round(16 + overtime * 0.1);
         params.hpScale = 2.0 + overtime * 0.01;
         params.speedScale = 1.4 + overtime * 0.003;
       }
