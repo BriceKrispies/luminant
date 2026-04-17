@@ -123,8 +123,8 @@ export function createObservationBuilder(engine) {
         const dist = Math.sqrt(dx * dx + dy * dy);
         const ang = Math.atan2(dy, dx);
 
-        // Enemies (types 2-9)
-        if (type >= 2 && type <= 9) {
+        // Enemies (types 2-13)
+        if (type >= 2 && type <= 13) {
           totalEnemies++;
 
           if (dist < NEAR_RADIUS) nearEnemyCount++;
@@ -172,7 +172,7 @@ export function createObservationBuilder(engine) {
         const arcQuery = engine.gridQuery(playerX, playerY, weaponRange);
         for (const id of arcQuery) {
           const type = engine.getEntityType(id);
-          if (type < 2 || type > 9) continue;
+          if (type < 2 || type > 13) continue;
           if (engine.getEntityState(id) !== STATE.ACTIVE) continue;
           const ex = engine.getEntityX(id);
           const ey = engine.getEntityY(id);

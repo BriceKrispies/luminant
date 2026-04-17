@@ -116,6 +116,7 @@ function spawnScaled(spawner, engine, count, px, py, params) {
     const speed = Math.round(def.speed * speedScale);
     const xp = Math.round(def.xp * xpScale);
 
-    engine.spawnEntity(def.type, x, y, hp, speed, def.radius, def.damage, xp);
+    const id = engine.spawnEntity(def.type, x, y, hp, speed, def.radius, def.damage, xp);
+    if (id >= 0 && def.behaviorId != null) engine.setBehavior(id, def.behaviorId);
   }
 }

@@ -38,8 +38,8 @@ export function createSnapshot(engine) {
     };
 
     if (id === playerId) player = e;
-    if (type >= 2 && type <= 9) enemyCount++;
-    if (type >= 10 && type <= 19) projectileCount++;
+    if (type >= 2 && type <= 13) enemyCount++;
+    if (type >= 14 && type <= 19) projectileCount++;
     if (type >= 20) pickupCount++;
 
     entities.push(e);

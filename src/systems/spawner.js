@@ -37,7 +37,10 @@ export function createSpawnerSystem(engine) {
           def.type, x, y,
           def.hp, def.speed, def.radius, def.damage, def.xp
         );
-        if (id >= 0) spawned.push(id);
+        if (id >= 0) {
+          if (def.behaviorId != null) engine.setBehavior(id, def.behaviorId);
+          spawned.push(id);
+        }
       }
       return spawned;
     },
@@ -46,7 +49,9 @@ export function createSpawnerSystem(engine) {
     spawnOne(typeKey, x, y) {
       const def = ENEMY_DEFS[typeKey];
       if (!def) return -1;
-      return engine.spawnEntity(def.type, x, y, def.hp, def.speed, def.radius, def.damage, def.xp);
+      const id = engine.spawnEntity(def.type, x, y, def.hp, def.speed, def.radius, def.damage, def.xp);
+      if (id >= 0 && def.behaviorId != null) engine.setBehavior(id, def.behaviorId);
+      return id;
     },
   };
 }

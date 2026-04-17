@@ -112,8 +112,8 @@
         const r = Math.max(2, buf.getFloat32(base + FIELD.RADIUS, true) * scale);
 
         if (type === TYPE.PLAYER) ctx.fillStyle = '#ffd080';
-        else if (type >= 2 && type <= 9) ctx.fillStyle = state === 2 ? '#444' : '#4a8';
-        else if (type >= 10 && type <= 19) ctx.fillStyle = '#ff8';
+        else if (type >= 2 && type <= 13) ctx.fillStyle = state === 2 ? '#444' : '#4a8';
+        else if (type >= 14 && type <= 19) ctx.fillStyle = '#ff8';
         else ctx.fillStyle = '#4af';
 
         ctx.beginPath();

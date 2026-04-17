@@ -20,11 +20,46 @@ export const FIELD = {
 };
 
 // Entity types (must match core.wat)
+// Enemies occupy 2-13 (12 slots for 10 distinct behaviors + 2 stat variants of Pursuer).
+// Projectiles shift to 14-17 to make room. Pickups stay at 20+.
 export const TYPE = {
   NONE: 0, PLAYER: 1,
-  ENEMY_BASIC: 2, ENEMY_FAST: 3, ENEMY_TANK: 4, ENEMY_RANGED: 5,
-  PROJECTILE_BULLET: 10, PROJECTILE_SPREAD: 11, PROJECTILE_AOE: 12,
+  ENEMY_BASIC: 2, ENEMY_FAST: 3, ENEMY_TANK: 4,
+  ENEMY_SHOOTER: 5, ENEMY_RANGED: 5, // alias retained for back-compat
+  ENEMY_ORBITER: 6, ENEMY_KITER: 7, ENEMY_CHARGER: 8,
+  ENEMY_FLANKER: 9, ENEMY_ZIGZAG: 10, ENEMY_AMBUSHER: 11,
+  ENEMY_RETREATER: 12, ENEMY_SUMMONER: 13,
+  PROJECTILE_BULLET: 14, PROJECTILE_SPREAD: 15, PROJECTILE_AOE: 16,
+  PROJECTILE_ENEMY: 17,
   PICKUP_XP: 20, PICKUP_HEALTH: 21,
+};
+
+// Enemy type range (inclusive) — used by many systems for type filtering.
+export const ENEMY_TYPE_MIN = 2;
+export const ENEMY_TYPE_MAX = 13;
+export const PROJECTILE_TYPE_MIN = 14;
+export const PROJECTILE_TYPE_MAX = 19;
+
+// Behavior IDs — stored in lower 4 bits of FLAGS field for each enemy.
+// Each enemy's behavior is 1:1 with its TYPE, but we store it separately
+// so WAT can dispatch without an intermediate type→behavior lookup.
+export const BEHAVIOR = {
+  PURSUER: 0,
+  SHOOTER: 1,
+  ORBITER: 2,
+  KITER: 3,
+  CHARGER: 4,
+  FLANKER: 5,
+  ZIGZAG: 6,
+  AMBUSHER: 7,
+  RETREATER: 8,
+  SUMMONER: 9,
+};
+
+// Action flag bits inside the FLAGS field.
+export const ACTION_FLAG = {
+  SHOOT: 1 << 8,
+  SUMMON: 1 << 9,
 };
 
 // Entity states
@@ -142,6 +177,30 @@ export class EngineBindings {
 
   setEntityLifetime(id, lt) {
     this.wasm.set_entity_lifetime(id, lt);
+  }
+
+  // ---- Behaviors (enemy AI dispatch) ----
+
+  /** Set the behavior id (low 4 bits) of an enemy, clearing sub-phase and action flags. */
+  setBehavior(id, behaviorId) {
+    this.setI32(id, FIELD.FLAGS, behaviorId & 0x0F);
+  }
+
+  /** Read the behavior id (low 4 bits). */
+  getBehavior(id) {
+    return this.getI32(id, FIELD.FLAGS) & 0x0F;
+  }
+
+  /**
+   * Read and clear any pending action flag bits (SHOOT, SUMMON).
+   * Returns the raw action-bit value so callers can check with & ACTION_FLAG.*.
+   */
+  consumeActionFlags(id) {
+    const flags = this.getI32(id, FIELD.FLAGS);
+    const actionMask = 0xFF00; // bits 8-15 reserved for action flags
+    if ((flags & actionMask) === 0) return 0;
+    this.setI32(id, FIELD.FLAGS, flags & ~actionMask);
+    return flags & actionMask;
   }
 
   // ---- Metrics (from memory) ----

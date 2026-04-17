@@ -40,9 +40,11 @@ See `docs/architecture.md` for full layout.
 JS calls WASM exports: `init`, `step`, `spawn_entity`, `despawn_entity`, `set_player_input`, `grid_query`, etc.
 JS reads entity data directly from `memory.buffer` using typed array views.
 Entity stride = 64 bytes. Field offsets defined in `src/engine/bindings.js`.
-Entity types: 1=player, 2-9=enemies, 10-19=projectiles, 20+=pickups.
+Entity types: 1=player, 2-13=enemies, 14-17=projectiles, 20+=pickups.
 Entity states: 0=free, 1=active, 2=dying.
 Snapshot includes `facing` field (radians) for directional creature rendering.
+
+**Enemy behaviors** — 10 distinct steering behaviors in WAT `$update_enemies`, dispatched on the low 4 bits of the flags field (+56) which carries the `behavior_id`. Behavior state reuses per-enemy offsets: +52 `behavior_phase` (f32), +56 `behavior_flags` (i32: id/sub-phase/action bits), +60 `action_cd` (f32). Behaviors: 0=pursuer, 1=shooter, 2=orbiter, 3=kiter, 4=charger (windup→dash→recover), 5=flanker (uses player velocity), 6=zigzag (triangle-wave perpendicular), 7=ambusher (hidden→dash→pursue), 8=retreater (flees when HP < 50%), 9=summoner (kites + spawns minions via JS). Shooter/summoner set action flags; `src/systems/enemy-actions.js` polls each tick and spawns projectiles (PROJECTILE_ENEMY=17) or calls `spawner.spawnOne`. Enemy projectile→player collision handled in JS. See `src/content/enemy-types.js` for ENEMY_DEFS registry (each key maps to a `type` + `behaviorId`).
 
 ## Renderer
 

@@ -17,6 +17,7 @@ import { createXPSystem } from '../../../src/systems/xp.js';
 import { createSkillSystem } from '../../../src/systems/skills.js';
 import { createCooldownSystem } from '../../../src/systems/cooldowns.js';
 import { createEliteSystem } from '../../../src/systems/elite-system.js';
+import { createEnemyActionsSystem } from '../../../src/systems/enemy-actions.js';
 import { createObservationBuilder } from '../../../src/ai/observations.js';
 import { createCanvasRenderer } from '../../../src/renderer/canvas-renderer.js';
 import { createCameraSystem } from '../../../src/systems/camera.js';
@@ -64,6 +65,7 @@ export async function createSimInstance(config = {}) {
   const skills = createSkillSystem(player, weapons);
   const cooldowns = createCooldownSystem();
   const elites = createEliteSystem(engine, spawner);
+  const enemyActions = createEnemyActionsSystem(engine, spawner, player);
   const director = createDirectorSystem(engine, spawner);
   const obsBuilder = createObservationBuilder(engine);
 
@@ -192,6 +194,7 @@ export async function createSimInstance(config = {}) {
       // Director + elites — use cached count from last snapshot to avoid rescanning
       director.update(DT, pp.x, pp.y, cachedEnemyCount);
       elites.update(DT, pp.x, pp.y, director.gameTime);
+      enemyActions.update(DT);
 
       // Camera — static arena view, still updates shake/impulse
       camera.update(DT);

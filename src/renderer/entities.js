@@ -43,8 +43,8 @@ export function drawEntities(ctx, snapshot, camera) {
         e.y < view.top - margin || e.y > view.bottom + margin) continue;
 
     if (e.type === TYPE.PLAYER) player = e;
-    else if (e.type >= 2 && e.type <= 9) enemies.push(e);
-    else if (e.type >= 10 && e.type <= 19) projectiles.push(e);
+    else if (e.type >= 2 && e.type <= 13) enemies.push(e);
+    else if (e.type >= 14 && e.type <= 19) projectiles.push(e);
     else if (e.type >= 20) pickups.push(e);
   }
 

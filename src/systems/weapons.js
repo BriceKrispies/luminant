@@ -115,7 +115,7 @@ export function createWeaponSystem(engine, deps = {}) {
 
       for (const id of nearby) {
         const etype = engine.getEntityType(id);
-        if (etype < 2 || etype > 9) continue;
+        if (etype < 2 || etype > 13) continue;
         if (engine.getEntityState(id) !== 1) continue;
 
         const ex = engine.getEntityX(id);

@@ -18,11 +18,11 @@ export const PHASES = [
     xpScale: [1.8, 1.5],         // generous XP
     spawnDist: [450, 400],
   },
-  // Phase 2 (60–180s): Variety. New enemy types, moderate pressure.
+  // Phase 2 (60–180s): Movement variety. Orbiters/kiters/zigzag join in.
   {
     startTime: 60,
     endTime: 180,
-    types: ['basic', 'fast', 'tank'],
+    types: ['basic', 'fast', 'tank', 'zigzag', 'orbiter', 'kiter'],
     spawnInterval: [0.6, 0.35],
     spawnBatch: [4, 6],
     maxConcurrent: [50, 120],
@@ -31,11 +31,11 @@ export const PHASES = [
     xpScale: [1.3, 1.0],
     spawnDist: [400, 350],
   },
-  // Phase 3 (180–300s): Pressure. Aggressive scaling, tighter spawns.
+  // Phase 3 (180–300s): Tactical variety. Chargers, flankers, retreaters.
   {
     startTime: 180,
     endTime: 300,
-    types: ['basic', 'fast', 'tank', 'ranged'],
+    types: ['basic', 'fast', 'tank', 'ranged', 'orbiter', 'kiter', 'zigzag', 'charger', 'flanker', 'retreater'],
     spawnInterval: [0.35, 0.2],
     spawnBatch: [6, 10],
     maxConcurrent: [120, 250],
@@ -44,11 +44,14 @@ export const PHASES = [
     xpScale: [1.0, 0.8],
     spawnDist: [350, 280],
   },
-  // Phase 4 (300–420s): Chaos. Extreme density, run must end.
+  // Phase 4 (300–420s): Full chaos. Shooters, summoners, ambushers unlocked.
   {
     startTime: 300,
     endTime: 420,
-    types: ['basic', 'fast', 'tank', 'ranged'],
+    types: [
+      'basic', 'fast', 'tank', 'ranged', 'orbiter', 'kiter',
+      'zigzag', 'charger', 'flanker', 'retreater', 'ambusher', 'summoner',
+    ],
     spawnInterval: [0.2, 0.1],
     spawnBatch: [10, 16],
     maxConcurrent: [250, 500],

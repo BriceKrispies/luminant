@@ -431,7 +431,7 @@ export function createWebGPURenderer(canvas) {
         let alpha = 1;
         let shape = 0; // circle
 
-        if (e.type >= 2 && e.type <= 9) {
+        if (e.type >= 2 && e.type <= 13) {
           // Fallback for enemies without archetypes
           const key = TYPE_TO_KEY[e.type];
           const def = key ? ENEMY_DEFS[key] : null;
@@ -443,7 +443,7 @@ export function createWebGPURenderer(canvas) {
           }
           if (e.type === TYPE.ENEMY_TANK) shape = 1;
           if (e.state === STATE.DYING) alpha = 0.4;
-        } else if (e.type >= 10 && e.type <= 19) {
+        } else if (e.type >= 14 && e.type <= 19) {
           cr = 1; cg = 1; cb = 0.5;
           if (e.type === TYPE.PROJECTILE_SPREAD) { cr = 1; cg = 0.5; cb = 0.25; }
           if (e.type === TYPE.PROJECTILE_AOE) { cr = 0.25; cg = 0.8; cb = 1; }

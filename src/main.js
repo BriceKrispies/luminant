@@ -23,6 +23,7 @@ import { createCameraSystem } from './systems/camera.js';
 import { createCooldownSystem } from './systems/cooldowns.js';
 import { createFeedbackSystem } from './systems/feedback.js';
 import { createEliteSystem } from './systems/elite-system.js';
+import { createEnemyActionsSystem } from './systems/enemy-actions.js';
 import { createPlayerAISystem } from './systems/player-ai-system.js';
 import { createRendererManager } from './renderer/renderer-manager.js';
 import { createDebugOverlay } from './renderer/debug-overlay.js';
@@ -142,6 +143,7 @@ async function main() {
   const skills = createSkillSystem(player, weapons);
   const cooldowns = createCooldownSystem();
   const elites = createEliteSystem(engine, spawner);
+  const enemyActions = createEnemyActionsSystem(engine, spawner, player);
   const autoPlayer = createPlayerAISystem(engine);
 
   const gameOverUI = createGameOverUI(document.getElementById('game-over-screen'));
@@ -364,6 +366,7 @@ async function main() {
       // Director + elites — use snapshot enemy count from last frame to avoid rescanning
       director.update(dt, pp.x, pp.y, lastEnemyCount);
       elites.update(dt, pp.x, pp.y, director.gameTime);
+      enemyActions.update(dt);
 
       // Camera — static arena view, still updates shake/impulse
       camera.update(dt);

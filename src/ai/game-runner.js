@@ -17,6 +17,7 @@ import { createXPSystem } from '../systems/xp.js';
 import { createSkillSystem } from '../systems/skills.js';
 import { createCooldownSystem } from '../systems/cooldowns.js';
 import { createEliteSystem } from '../systems/elite-system.js';
+import { createEnemyActionsSystem } from '../systems/enemy-actions.js';
 import { createObservationBuilder } from './observations.js';
 import { computeScore } from './scoring.js';
 
@@ -89,6 +90,7 @@ export async function runGame(options) {
     const skills = createSkillSystem(player, weapons);
     const cooldowns = createCooldownSystem();
     const elites = createEliteSystem(engine, spawner);
+    const enemyActions = createEnemyActionsSystem(engine, spawner, player);
     const director = createDirectorSystem(engine, spawner);
     const obsBuilder = createObservationBuilder(engine);
 
@@ -201,6 +203,7 @@ export async function runGame(options) {
       const enemyCount = engine.countByType(2, 9);
       director.update(DT, pp.x, pp.y, enemyCount);
       elites.update(DT, pp.x, pp.y, director.gameTime);
+      enemyActions.update(DT);
 
       // Level-up
       if (xpSystem.pendingLevelUps > 0) {
@@ -313,6 +316,7 @@ export async function runGameWithBehavior(options) {
     const skills = createSkillSystem(player, weapons);
     const cooldowns = createCooldownSystem();
     const elites = createEliteSystem(engine, spawner);
+    const enemyActions = createEnemyActionsSystem(engine, spawner, player);
     const director = createDirectorSystem(engine, spawner);
     const obsBuilder = createObservationBuilder(engine);
 
@@ -461,6 +465,7 @@ export async function runGameWithBehavior(options) {
       const enemyCount = engine.countByType(2, 9);
       director.update(DT, pp.x, pp.y, enemyCount);
       elites.update(DT, pp.x, pp.y, director.gameTime);
+      enemyActions.update(DT);
 
       if (xpSystem.pendingLevelUps > 0) {
         const choices = skills.getUpgradeChoices(3);

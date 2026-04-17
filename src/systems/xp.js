@@ -54,7 +54,7 @@ export function createXPSystem(engine, deps = {}) {
         // Never despawn the player — death is handled by the main loop's isAlive() check
         if (id === playerId) return;
 
-        if (type >= 2 && type <= 9) {
+        if (type >= 2 && type <= 13) {
           const ex = engine.getEntityX(id);
           const ey = engine.getEntityY(id);
           const xpValue = engine.getEntityXPValue(id);

@@ -70,6 +70,7 @@ export function createEliteSystem(engine, spawner) {
 
       const id = engine.spawnEntity(def.type, x, y, hp, speed, radius, def.damage * 1.5, xp);
       if (id >= 0) {
+        if (def.behaviorId != null) engine.setBehavior(id, def.behaviorId);
         activeElites.add(id);
         eliteCount++;
       }

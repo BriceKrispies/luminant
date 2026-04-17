@@ -40,7 +40,7 @@ export function drawLights(ctx, snapshot, camera, view) {
   }
 
   // Enemy cluster glow — subtle color where many enemies gather
-  const enemyClusters = findClusters(snapshot.entities.filter(e => e.type >= 2 && e.type <= 9), 150);
+  const enemyClusters = findClusters(snapshot.entities.filter(e => e.type >= 2 && e.type <= 13), 150);
   for (const cluster of enemyClusters) {
     if (cluster.count >= 5) {
       drawRadialLight(ctx, cluster.x, cluster.y, 100, [200, 60, 40], 0.04 * Math.min(cluster.count / 10, 1));

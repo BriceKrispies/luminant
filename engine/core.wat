@@ -34,12 +34,25 @@
   ;;
   ;; TYPE ENUM
   ;; -------
-  ;;  0  = unused          10 = projectile_bullet
-  ;;  1  = player           11 = projectile_spread
-  ;;  2  = enemy_basic      12 = projectile_aoe_ring
-  ;;  3  = enemy_fast       20 = pickup_xp
-  ;;  4  = enemy_tank       21 = pickup_health
-  ;;  5  = enemy_ranged
+  ;;  0  = unused             8  = enemy_charger      14 = projectile_bullet
+  ;;  1  = player              9  = enemy_flanker      15 = projectile_spread
+  ;;  2  = enemy_basic         10 = enemy_zigzag       16 = projectile_aoe_ring
+  ;;  3  = enemy_fast          11 = enemy_ambusher     17 = projectile_enemy
+  ;;  4  = enemy_tank          12 = enemy_retreater    20 = pickup_xp
+  ;;  5  = enemy_shooter       13 = enemy_summoner     21 = pickup_health
+  ;;  6  = enemy_orbiter
+  ;;  7  = enemy_kiter
+  ;;
+  ;; ENEMY BEHAVIOR ID (stored in low 4 bits of flags at +56)
+  ;; 0=pursuer 1=shooter 2=orbiter 3=kiter 4=charger
+  ;; 5=flanker 6=zigzag 7=ambusher 8=retreater 9=summoner
+  ;; Bits 4-7: sub-phase. Bit 8: shoot_request. Bit 9: summon_request.
+  ;;
+  ;; ENEMY REPURPOSED OFFSETS
+  ;; +48 cooldown   — contact-damage cooldown (unchanged)
+  ;; +52 facing     — reused as behavior_phase (f32, orbit angle / zigzag phase)
+  ;; +56 flags      — behavior_id + sub_phase + action_flags (see above)
+  ;; +60 lifetime   — reused as action_cd (f32, fire/summon/dash timers)
   ;;
   ;; SPATIAL GRID
   ;; -------
@@ -135,6 +148,11 @@
       (then (global.set $g_active (i32.sub (global.get $g_active) (i32.const 1))))
     )
     (i32.store offset=28 (local.get $a) (i32.const 0))
+    ;; Clear behavior-state offsets so recycled slots don't inherit stale data
+    (f32.store offset=48 (local.get $a) (f32.const 0))
+    (f32.store offset=52 (local.get $a) (f32.const 0))
+    (i32.store offset=56 (local.get $a) (i32.const 0))
+    (f32.store offset=60 (local.get $a) (f32.const 0))
   )
 
   ;; ===================== INPUT / ACCESSORS ==================
@@ -278,10 +296,14 @@
   )
 
   ;; ===================== UPDATE ENEMIES =====================
-  ;; Direct pursuit toward player + same-cell separation.
+  ;; Per-type behavior dispatch: pursuer/shooter/orbiter/kiter/charger/
+  ;; flanker/zigzag/ambusher/retreater/summoner — all share separation
+  ;; and velocity integration; only the intent direction (and speed
+  ;; multiplier) differs per behavior.
   (func $update_enemies (export "update_enemies") (param $dt f32)
     (local $i i32) (local $a i32) (local $tp i32)
     (local $pa i32) (local $px f32) (local $py f32)
+    (local $pvx f32) (local $pvy f32) (local $pvl f32)
     (local $ex f32) (local $ey f32) (local $spd f32)
     (local $dx f32) (local $dy f32) (local $len f32)
     (local $sx f32) (local $sy f32)
@@ -292,12 +314,20 @@
     (local $sdx f32) (local $sdy f32) (local $dist f32)
     (local $md f32) (local $push f32)
     (local $vx f32) (local $vy f32) (local $cd f32)
+    (local $flg i32) (local $beh i32) (local $sub i32)
+    (local $bph f32) (local $acd f32) (local $smult f32)
+    (local $dx0 f32) (local $dy0 f32) (local $tmp f32)
 
     (if (i32.lt_s (global.get $g_player_id) (i32.const 0)) (then (return)))
     (local.set $pa (i32.shl (global.get $g_player_id) (i32.const 6)))
     (if (i32.ne (i32.load offset=28 (local.get $pa)) (i32.const 1)) (then (return)))
     (local.set $px (f32.load offset=0 (local.get $pa)))
     (local.set $py (f32.load offset=4 (local.get $pa)))
+    (local.set $pvx (f32.load offset=8 (local.get $pa)))
+    (local.set $pvy (f32.load offset=12 (local.get $pa)))
+    (local.set $pvl (f32.sqrt (f32.add
+      (f32.mul (local.get $pvx) (local.get $pvx))
+      (f32.mul (local.get $pvy) (local.get $pvy)))))
 
     (local.set $i (i32.const 0))
     (block $end (loop $lp
@@ -307,7 +337,7 @@
         (then
           (local.set $tp (i32.load offset=24 (local.get $a)))
           (if (i32.and (i32.ge_u (local.get $tp) (i32.const 2))
-                       (i32.le_u (local.get $tp) (i32.const 9)))
+                       (i32.le_u (local.get $tp) (i32.const 13)))
             (then
               ;; cooldown tick
               (local.set $cd (f32.load offset=48 (local.get $a)))
@@ -333,6 +363,220 @@
                 (else (local.set $dx (f32.const 0)) (local.set $dy (f32.const 0)))
               )
 
+              ;; === BEHAVIOR DISPATCH ===
+              (local.set $flg (i32.load offset=56 (local.get $a)))
+              (local.set $beh (i32.and (local.get $flg) (i32.const 0x0F)))
+              (local.set $sub (i32.and (i32.shr_u (local.get $flg) (i32.const 4)) (i32.const 0x0F)))
+              (local.set $bph (f32.load offset=52 (local.get $a)))
+              (local.set $acd (f32.load offset=60 (local.get $a)))
+              (local.set $smult (f32.const 1.0))
+
+              ;; SHOOTER (1): kite @ 260, fire flag on cd
+              (if (i32.eq (local.get $beh) (i32.const 1)) (then
+                (if (f32.lt (local.get $len) (f32.const 221))
+                  (then
+                    (local.set $dx (f32.neg (local.get $dx)))
+                    (local.set $dy (f32.neg (local.get $dy)))
+                  )
+                  (else (if (f32.lt (local.get $len) (f32.const 299))
+                    (then
+                      (local.set $dx0 (local.get $dx))
+                      (local.set $dx (f32.mul (f32.neg (local.get $dy)) (f32.const 0.3)))
+                      (local.set $dy (f32.mul (local.get $dx0) (f32.const 0.3)))
+                    )
+                  ))
+                )
+                (local.set $acd (f32.sub (local.get $acd) (local.get $dt)))
+                (if (i32.and
+                      (f32.le (local.get $acd) (f32.const 0))
+                      (f32.lt (local.get $len) (f32.const 400)))
+                  (then
+                    (local.set $flg (i32.or (local.get $flg) (i32.const 0x100)))
+                    (local.set $acd (f32.const 1.2))
+                  )
+                )
+                (f32.store offset=60 (local.get $a) (local.get $acd))
+                (i32.store offset=56 (local.get $a) (local.get $flg))
+              ))
+
+              ;; ORBITER (2): tangent + radial correction around r=160
+              (if (i32.eq (local.get $beh) (i32.const 2)) (then
+                ;; tangent CCW = (-dy, dx); flip if i odd
+                (local.set $dx0 (f32.neg (local.get $dy)))
+                (local.set $dy0 (local.get $dx))
+                (if (i32.and (local.get $i) (i32.const 1)) (then
+                  (local.set $dx0 (f32.neg (local.get $dx0)))
+                  (local.set $dy0 (f32.neg (local.get $dy0)))
+                ))
+                ;; radial k in [-1,1]
+                (local.set $tmp (f32.div (f32.sub (local.get $len) (f32.const 160)) (f32.const 60)))
+                (local.set $tmp (f32.max (f32.const -1) (f32.min (local.get $tmp) (f32.const 1))))
+                (local.set $dx (f32.add (local.get $dx0) (f32.mul (local.get $dx) (local.get $tmp))))
+                (local.set $dy (f32.add (local.get $dy0) (f32.mul (local.get $dy) (local.get $tmp))))
+              ))
+
+              ;; KITER (3): maintain 200 ±15%
+              (if (i32.eq (local.get $beh) (i32.const 3)) (then
+                (if (f32.lt (local.get $len) (f32.const 170))
+                  (then
+                    (local.set $dx (f32.neg (local.get $dx)))
+                    (local.set $dy (f32.neg (local.get $dy)))
+                  )
+                  (else (if (f32.lt (local.get $len) (f32.const 230))
+                    (then
+                      (local.set $dx0 (local.get $dx))
+                      (local.set $dx (f32.mul (f32.neg (local.get $dy)) (f32.const 0.3)))
+                      (local.set $dy (f32.mul (local.get $dx0) (f32.const 0.3)))
+                    )
+                  ))
+                )
+              ))
+
+              ;; CHARGER (4): approach → windup → dash (homing) → recover
+              (if (i32.eq (local.get $beh) (i32.const 4)) (then
+                (local.set $acd (f32.sub (local.get $acd) (local.get $dt)))
+                (if (i32.eqz (local.get $sub)) (then
+                  ;; sub=0 approach
+                  (local.set $smult (f32.const 0.5))
+                  (if (f32.lt (local.get $len) (f32.const 200)) (then
+                    (local.set $sub (i32.const 1))
+                    (local.set $acd (f32.const 0.5))
+                  ))
+                ))
+                (if (i32.eq (local.get $sub) (i32.const 1)) (then
+                  ;; sub=1 windup (still)
+                  (local.set $dx (f32.const 0)) (local.set $dy (f32.const 0))
+                  (local.set $smult (f32.const 0))
+                  (if (f32.le (local.get $acd) (f32.const 0)) (then
+                    (local.set $sub (i32.const 2))
+                    (local.set $acd (f32.const 0.5))
+                  ))
+                ))
+                (if (i32.eq (local.get $sub) (i32.const 2)) (then
+                  ;; sub=2 dash (homing at high speed)
+                  (local.set $smult (f32.const 3.0))
+                  (if (f32.le (local.get $acd) (f32.const 0)) (then
+                    (local.set $sub (i32.const 3))
+                    (local.set $acd (f32.const 1.0))
+                  ))
+                ))
+                (if (i32.eq (local.get $sub) (i32.const 3)) (then
+                  ;; sub=3 recover
+                  (local.set $dx (f32.const 0)) (local.set $dy (f32.const 0))
+                  (local.set $smult (f32.const 0.3))
+                  (if (f32.le (local.get $acd) (f32.const 0)) (then
+                    (local.set $sub (i32.const 0))
+                    (local.set $acd (f32.const 0))
+                  ))
+                ))
+                ;; write sub + acd
+                (local.set $flg (i32.or
+                  (i32.and (local.get $flg) (i32.const 0xFFFFFF0F))
+                  (i32.shl (local.get $sub) (i32.const 4))))
+                (i32.store offset=56 (local.get $a) (local.get $flg))
+                (f32.store offset=60 (local.get $a) (local.get $acd))
+              ))
+
+              ;; FLANKER (5): aim 90° off player velocity
+              (if (i32.eq (local.get $beh) (i32.const 5)) (then
+                (if (f32.gt (local.get $pvl) (f32.const 10)) (then
+                  ;; perp to (pvx,pvy) is (-pvy, pvx); side by parity
+                  (local.set $dx0 (f32.div (f32.neg (local.get $pvy)) (local.get $pvl)))
+                  (local.set $dy0 (f32.div (local.get $pvx) (local.get $pvl)))
+                  (if (i32.and (local.get $i) (i32.const 1)) (then
+                    (local.set $dx0 (f32.neg (local.get $dx0)))
+                    (local.set $dy0 (f32.neg (local.get $dy0)))
+                  ))
+                  ;; target = player + perp*120; intent = target - enemy
+                  (local.set $dx (f32.sub
+                    (f32.add (local.get $px) (f32.mul (local.get $dx0) (f32.const 120)))
+                    (local.get $ex)))
+                  (local.set $dy (f32.sub
+                    (f32.add (local.get $py) (f32.mul (local.get $dy0) (f32.const 120)))
+                    (local.get $ey)))
+                ))
+              ))
+
+              ;; ZIGZAG (6): forward + triangle-wave perpendicular
+              (if (i32.eq (local.get $beh) (i32.const 6)) (then
+                (local.set $bph (f32.add (local.get $bph) (f32.mul (local.get $dt) (f32.const 2))))
+                (if (f32.ge (local.get $bph) (f32.const 1))
+                  (then (local.set $bph (f32.sub (local.get $bph) (f32.const 1))))
+                )
+                ;; triangle wave in [-1,1]
+                (if (f32.lt (local.get $bph) (f32.const 0.5))
+                  (then (local.set $tmp (f32.sub (f32.mul (local.get $bph) (f32.const 4)) (f32.const 1))))
+                  (else (local.set $tmp (f32.sub (f32.const 3) (f32.mul (local.get $bph) (f32.const 4)))))
+                )
+                (local.set $tmp (f32.mul (local.get $tmp) (f32.const 0.6)))
+                ;; intent = forward + perp*side
+                (local.set $dx0 (local.get $dx))
+                (local.set $dx (f32.add (local.get $dx) (f32.mul (f32.neg (local.get $dy)) (local.get $tmp))))
+                (local.set $dy (f32.add (local.get $dy) (f32.mul (local.get $dx0) (local.get $tmp))))
+                (f32.store offset=52 (local.get $a) (local.get $bph))
+              ))
+
+              ;; AMBUSHER (7): hidden → reveal/dash → normal pursue
+              (if (i32.eq (local.get $beh) (i32.const 7)) (then
+                (if (i32.eqz (local.get $sub)) (then
+                  ;; hidden
+                  (local.set $dx (f32.const 0)) (local.set $dy (f32.const 0))
+                  (local.set $smult (f32.const 0))
+                  (if (f32.lt (local.get $len) (f32.const 150)) (then
+                    (local.set $sub (i32.const 1))
+                    (local.set $acd (f32.const 1.0))
+                  ))
+                ))
+                (if (i32.eq (local.get $sub) (i32.const 1)) (then
+                  ;; revealed dash (homing)
+                  (local.set $smult (f32.const 2.5))
+                  (local.set $acd (f32.sub (local.get $acd) (local.get $dt)))
+                  (if (f32.le (local.get $acd) (f32.const 0)) (then
+                    (local.set $sub (i32.const 2))
+                  ))
+                ))
+                ;; sub==2: fall through to pursuit
+                (local.set $flg (i32.or
+                  (i32.and (local.get $flg) (i32.const 0xFFFFFF0F))
+                  (i32.shl (local.get $sub) (i32.const 4))))
+                (i32.store offset=56 (local.get $a) (local.get $flg))
+                (f32.store offset=60 (local.get $a) (local.get $acd))
+              ))
+
+              ;; RETREATER (8): flee if hp < 0.5 maxHP
+              (if (i32.eq (local.get $beh) (i32.const 8)) (then
+                (if (f32.lt
+                      (f32.load offset=16 (local.get $a))
+                      (f32.mul (f32.load offset=20 (local.get $a)) (f32.const 0.5)))
+                  (then
+                    (local.set $dx (f32.neg (local.get $dx)))
+                    (local.set $dy (f32.neg (local.get $dy)))
+                  )
+                )
+              ))
+
+              ;; SUMMONER (9): hang back @ 300, raise summon flag on cd
+              (if (i32.eq (local.get $beh) (i32.const 9)) (then
+                (if (f32.lt (local.get $len) (f32.const 255))
+                  (then
+                    (local.set $dx (f32.mul (f32.neg (local.get $dx)) (f32.const 0.5)))
+                    (local.set $dy (f32.mul (f32.neg (local.get $dy)) (f32.const 0.5)))
+                    (local.set $smult (f32.const 0.8))
+                  )
+                  (else
+                    (local.set $dx (f32.const 0)) (local.set $dy (f32.const 0))
+                    (local.set $smult (f32.const 0.3))
+                  )
+                )
+                (local.set $acd (f32.sub (local.get $acd) (local.get $dt)))
+                (if (f32.le (local.get $acd) (f32.const 0)) (then
+                  (local.set $flg (i32.or (local.get $flg) (i32.const 0x200)))
+                  (local.set $acd (f32.const 4.0))
+                ))
+                (i32.store offset=56 (local.get $a) (local.get $flg))
+                (f32.store offset=60 (local.get $a) (local.get $acd))
+              ))
+
               ;; === separation (same cell) ===
               (local.set $sx (f32.const 0))
               (local.set $sy (f32.const 0))
@@ -357,7 +601,7 @@
                     (if (i32.and
                           (i32.eq (i32.load offset=28 (local.get $oa)) (i32.const 1))
                           (i32.and (i32.ge_u (i32.load offset=24 (local.get $oa)) (i32.const 2))
-                                   (i32.le_u (i32.load offset=24 (local.get $oa)) (i32.const 9))))
+                                   (i32.le_u (i32.load offset=24 (local.get $oa)) (i32.const 13))))
                       (then
                         (local.set $ox (f32.load offset=0 (local.get $oa)))
                         (local.set $oy (f32.load offset=4 (local.get $oa)))
@@ -386,7 +630,7 @@
                 (br $sl)
               ))
 
-              ;; combine pursuit + separation
+              ;; combine intent + separation, apply per-behavior speed multiplier
               (local.set $vx (f32.add (local.get $dx) (f32.mul (local.get $sx) (f32.const 0.5))))
               (local.set $vy (f32.add (local.get $dy) (f32.mul (local.get $sy) (f32.const 0.5))))
               (local.set $len (f32.sqrt (f32.add
@@ -394,8 +638,13 @@
                 (f32.mul (local.get $vy) (local.get $vy)))))
               (if (f32.gt (local.get $len) (f32.const 0.001))
                 (then
-                  (local.set $vx (f32.mul (f32.div (local.get $vx) (local.get $len)) (local.get $spd)))
-                  (local.set $vy (f32.mul (f32.div (local.get $vy) (local.get $len)) (local.get $spd)))
+                  (local.set $tmp (f32.mul (local.get $spd) (local.get $smult)))
+                  (local.set $vx (f32.mul (f32.div (local.get $vx) (local.get $len)) (local.get $tmp)))
+                  (local.set $vy (f32.mul (f32.div (local.get $vy) (local.get $len)) (local.get $tmp)))
+                )
+                (else
+                  (local.set $vx (f32.const 0))
+                  (local.set $vy (f32.const 0))
                 )
               )
               (f32.store offset=8  (local.get $a) (local.get $vx))
@@ -428,7 +677,7 @@
       (if (i32.eq (i32.load offset=28 (local.get $a)) (i32.const 1))
         (then
           (local.set $tp (i32.load offset=24 (local.get $a)))
-          (if (i32.and (i32.ge_u (local.get $tp) (i32.const 10))
+          (if (i32.and (i32.ge_u (local.get $tp) (i32.const 14))
                        (i32.le_u (local.get $tp) (i32.const 19)))
             (then
               ;; move
@@ -528,13 +777,18 @@
                           (local.set $or2 (f32.load offset=32 (local.get $oa)))
                           (local.set $md (f32.add (local.get $pr) (local.get $or2)))
 
-                          ;; enemy contact damage
+                          ;; enemy contact damage (ambushers in hidden sub=0 don't damage)
                           (if (i32.and
                                 (i32.and (i32.ge_u (local.get $ot) (i32.const 2))
-                                         (i32.le_u (local.get $ot) (i32.const 9)))
+                                         (i32.le_u (local.get $ot) (i32.const 13)))
                                 (f32.lt (local.get $d) (local.get $md)))
                             (then
-                              (if (f32.le (f32.load offset=48 (local.get $oa)) (f32.const 0))
+                              (if (i32.and
+                                    (f32.le (f32.load offset=48 (local.get $oa)) (f32.const 0))
+                                    ;; NOT (beh == 7 && sub == 0)
+                                    (i32.eqz (i32.and
+                                      (i32.eq (i32.and (i32.load offset=56 (local.get $oa)) (i32.const 0x0F)) (i32.const 7))
+                                      (i32.eqz (i32.and (i32.load offset=56 (local.get $oa)) (i32.const 0xF0))))))
                                 (then
                                   (f32.store offset=16 (local.get $pa)
                                     (f32.sub (f32.load offset=16 (local.get $pa))
@@ -590,8 +844,9 @@
       (local.set $a (i32.shl (local.get $i) (i32.const 6)))
       (if (i32.and
             (i32.eq (i32.load offset=28 (local.get $a)) (i32.const 1))
-            (i32.and (i32.ge_u (i32.load offset=24 (local.get $a)) (i32.const 10))
-                     (i32.le_u (i32.load offset=24 (local.get $a)) (i32.const 19))))
+            ;; Player projectiles only (bullet=14, spread=15, aoe=16). Enemy projectiles (17) skipped.
+            (i32.and (i32.ge_u (i32.load offset=24 (local.get $a)) (i32.const 14))
+                     (i32.le_u (i32.load offset=24 (local.get $a)) (i32.const 16))))
         (then
           (local.set $px (f32.load offset=0 (local.get $a)))
           (local.set $py (f32.load offset=4 (local.get $a)))
@@ -630,7 +885,7 @@
                         (if (i32.and
                               (i32.eq (i32.load offset=28 (local.get $oa)) (i32.const 1))
                               (i32.and (i32.ge_u (i32.load offset=24 (local.get $oa)) (i32.const 2))
-                                       (i32.le_u (i32.load offset=24 (local.get $oa)) (i32.const 9))))
+                                       (i32.le_u (i32.load offset=24 (local.get $oa)) (i32.const 13))))
                           (then
                             (global.set $g_col_checks (i32.add (global.get $g_col_checks) (i32.const 1)))
                             (local.set $ox (f32.load offset=0 (local.get $oa)))
@@ -689,7 +944,7 @@
           (i32.store offset=28 (local.get $a) (i32.const 2))
           (local.set $tp (i32.load offset=24 (local.get $a)))
           (if (i32.and (i32.ge_u (local.get $tp) (i32.const 2))
-                       (i32.le_u (local.get $tp) (i32.const 9)))
+                       (i32.le_u (local.get $tp) (i32.const 13)))
             (then (global.set $g_kills (i32.add (global.get $g_kills) (i32.const 1))))
           )
         )

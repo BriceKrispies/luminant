@@ -72,7 +72,7 @@ async function run() {
 
       // Kill all enemies at once (simulating a big AoE or shockwave chain)
       engine.forEachEntity((id, type, state) => {
-        if (type >= 2 && type <= 9 && state === STATE.ACTIVE) {
+        if (type >= 2 && type <= 13 && state === STATE.ACTIVE) {
           engine.applyDamage(id, 9999);
         }
       });

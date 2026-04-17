@@ -231,7 +231,16 @@ export const TYPE_TO_ARCHETYPE = {
   [TYPE.ENEMY_BASIC]: 'slime',
   [TYPE.ENEMY_FAST]: 'ghost',
   [TYPE.ENEMY_TANK]: 'brute',
-  [TYPE.ENEMY_RANGED]: 'ember',
+  [TYPE.ENEMY_SHOOTER]: 'ember',
+  // New behavior types reuse existing archetypes for a minimum-art baseline.
+  [TYPE.ENEMY_ORBITER]: 'ghost',
+  [TYPE.ENEMY_KITER]: 'ember',
+  [TYPE.ENEMY_CHARGER]: 'brute',
+  [TYPE.ENEMY_FLANKER]: 'ghost',
+  [TYPE.ENEMY_ZIGZAG]: 'slime',
+  [TYPE.ENEMY_AMBUSHER]: 'ghost',
+  [TYPE.ENEMY_RETREATER]: 'slime',
+  [TYPE.ENEMY_SUMMONER]: 'brute',
 };
 
 /**
