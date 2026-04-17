@@ -193,8 +193,7 @@ export async function createSimInstance(config = {}) {
       director.update(DT, pp.x, pp.y, cachedEnemyCount);
       elites.update(DT, pp.x, pp.y, director.gameTime);
 
-      // Camera
-      camera.setTarget(pp.x, pp.y);
+      // Camera — static arena view, still updates shake/impulse
       camera.update(DT);
 
       // Level-up

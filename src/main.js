@@ -365,8 +365,7 @@ async function main() {
       director.update(dt, pp.x, pp.y, lastEnemyCount);
       elites.update(dt, pp.x, pp.y, director.gameTime);
 
-      // Camera
-      camera.setTarget(pp.x, pp.y);
+      // Camera — static arena view, still updates shake/impulse
       camera.update(dt);
 
       // Level-up — enqueue choices for the on-screen picker
