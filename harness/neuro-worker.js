@@ -101,9 +101,15 @@ function behaviorScore(behavior, maxTicks) {
   }
 
   // ── Corner time penalty: fraction of time near walls ──
+  // Piecewise: small linear penalty above 10%, steep penalty above 25%.
+  // Previous (threshold 30%, factor 800) allowed the network to spend
+  // ~half the game hugging walls with negligible fitness cost.
   const cornerFrac = (behavior.wallFrames || 0) / totalTicks;
-  if (cornerFrac > 0.3) {
-    bonus -= (cornerFrac - 0.3) * 800; // penalize spending >30% of time at walls
+  if (cornerFrac > 0.1) {
+    bonus -= (cornerFrac - 0.1) * 2500;
+  }
+  if (cornerFrac > 0.25) {
+    bonus -= (cornerFrac - 0.25) * 3500;
   }
 
   // ── Wasteful attack penalty: attacks that hit nothing ──
