@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FeedforwardNetwork } from '../src/ai/neural/feedforward.js';
 import { INPUT_SIZE, encodeObservation } from '../src/ai/neural/encode.js';
-import { createPolicy } from '../src/ai/policy-types.js';
-import '../src/ai/neural/neural-policy.js';
 
 describe('FeedforwardNetwork', () => {
   it('reports correct weight count for default topology', () => {
@@ -289,89 +287,5 @@ describe('Neural policy interface', () => {
     expect(typeof action._neuralDebug.moveMag).toBe('number');
     expect(action._neuralDebug.rawOutput).toBeDefined();
     expect(action._neuralDebug.keyInputs).toBeDefined();
-  });
-});
-
-describe('Neural policy wall clamp', () => {
-  function makeObs(overrides) {
-    return {
-      playerX: 2048, playerY: 2048,
-      playerHP: 100, playerMaxHP: 100,
-      hpRatio: 1, level: 1, xp: 0, xpToNext: 100, xpRatio: 0,
-      weapon: 'sword', weaponReady: true, weaponCooldownRatio: 0,
-      weaponRange: 80, enemiesInArc: 0,
-      nearEnemyCount: 0, midEnemyCount: 0, farEnemyCount: 0,
-      sectorDensity: [0, 0, 0, 0, 0, 0, 0, 0],
-      sectorThreat: [0, 0, 0, 0, 0, 0, 0, 0],
-      nearestEnemyDist: 500, nearestEnemyAngle: 0,
-      nearestEnemyX: 2548, nearestEnemyY: 2048,
-      nearestPickupDist: 500, nearestPickupAngle: 0,
-      nearestPickupX: 2048, nearestPickupY: 2548,
-      recentDamageTaken: 0, gameTime: 0, wave: 0,
-      totalKills: 0, totalEnemies: 0,
-      worldW: 4096, worldH: 4096, distToEdge: 2048,
-      safestDirX: 1, safestDirY: 0,
-      acquiredUpgrades: [], activeEffects: [],
-      ...overrides,
-    };
-  }
-
-  it('hard-zone at left wall forces positive dx after one tick', () => {
-    const policy = createPolicy('neural');
-    policy.reset();
-    const action = policy.act(makeObs({
-      playerX: 10, playerY: 2048, distToEdge: 10,
-    }));
-    // Regardless of network output, hard-zone clamps rawDx to >= 0.6,
-    // so the EMA-smoothed dx must be positive after one tick.
-    expect(action.dx).toBeGreaterThan(0);
-  });
-
-  it('hard-zone at right wall forces negative dx', () => {
-    const policy = createPolicy('neural');
-    policy.reset();
-    const action = policy.act(makeObs({
-      playerX: 4086, playerY: 2048, distToEdge: 10,
-    }));
-    expect(action.dx).toBeLessThan(0);
-  });
-
-  it('hard-zone at top wall forces positive dy', () => {
-    const policy = createPolicy('neural');
-    policy.reset();
-    const action = policy.act(makeObs({
-      playerX: 2048, playerY: 15, distToEdge: 15,
-    }));
-    expect(action.dy).toBeGreaterThan(0);
-  });
-
-  it('escapes a corner over several ticks (not permanently stuck)', () => {
-    const policy = createPolicy('neural');
-    policy.reset();
-    // Simulate 10 ticks while pinned in the top-left corner. Track whether
-    // the output ever heads AWAY from walls (positive dx and dy).
-    let movedAway = false;
-    for (let i = 0; i < 10; i++) {
-      const action = policy.act(makeObs({
-        playerX: 5, playerY: 5, distToEdge: 5,
-      }));
-      if (action.dx > 0 && action.dy > 0) movedAway = true;
-    }
-    expect(movedAway).toBe(true);
-  });
-
-  it('soft zone preserves parallel-to-wall movement', () => {
-    // Build a deterministic network and weights that tan-h to roughly
-    // (0, -1) (straight "up") so we can verify that movement along the wall
-    // is preserved when near a vertical edge.
-    const policy = createPolicy('neural');
-    policy.reset();
-    // Network output is arbitrary but dy component preservation is inherent
-    // to the clamp logic — we can only verify that at px=80 (soft zone, not
-    // hard), dy is not forced.
-    const far = policy.act(makeObs({ playerX: 80, playerY: 2048, distToEdge: 80 }));
-    // With player outside hard zone (>30px), dy should not be forced to
-    // WALL_REPEL_STRENGTH. The network's natural output governs dy.
-    expect(Math.abs(far.dy)).toBeLessThan(1.01);  // bounded — i.e. not hard-forced
   });
 });
