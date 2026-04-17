@@ -16,21 +16,42 @@
  *      planner retreats earlier (retreatThreshold=0.2) so the trigger
  *      rarely fires. Berserker is movement-style-dependent and not
  *      additive for hand-coded policies.
- *  v4 (current): Keep v3's kill_shockwave path. Add heal_now spam
- *      fallback (maxStacks=99) for late-game sustain — strict additive
- *      improvement, observed in trained neural's best runs.
+ *  v4: Keep v3's kill_shockwave path. Add heal_now spam fallback
+ *      (maxStacks=99) for late-game sustain.
+ *  v4a (rejected): Tried berserker without tuning movement → 545 avg
+ *      kills because my planner retreated at 20% HP, out of berserker's
+ *      HP<50% activation zone. Berserker needs the planner to live
+ *      dangerously.
+ *  v5 (rejected): Mimicked neural's berserker path (sword → berserker →
+ *      thorns → damage + aggressive weights). Regressed to 531 avg
+ *      because my weights couldn't keep HP in berserker's [20%,50%]
+ *      trigger zone — planner either held HP > 50% or dropped to panic.
+ *      Berserker is movement-style-dependent; an MLP learned the band,
+ *      explicit weights don't.
+ *  v6-v7 (current): Keep v3's kill_shockwave path (+854 avg when offered
+ *      alone vs berserker's +455 in direct comparison). Add a stateful
+ *      HP-band controller in act() that gently biases movement toward
+ *      clusters above 65% HP (dive), slows movement inside weapon range
+ *      at 30-65% HP (hold), defers to planner below 30% (kite/flee).
+ *      Gated by level >= 3 and distToEdge >= 180 to avoid early-game
+ *      suicides and wall traps.
  *
- * Note: a freshly trained neural (npm run train --maxTicks=60000) hit
- * 5398 avg / 15,825 max kills. Hand-coded policies cap at ~1200 avg
- * because the late-game requires sub-tick movement decisions (when to
- * stand still for thorns, when to pivot through enemy gaps) that an MLP
- * learns but explicit weights can't easily express.
+ * Final 20-seed benchmark (seed=100, maxTicks=60000):
+ *   - Strategist:   avg 1069 / max  1,455 / max level 13 / survived 0/20
+ *   - Exterminator: avg 1141 / max  2,148 / max level 15 / survived 0/20
+ *   - Neural:       avg 4325 / max 18,104 / max level 43 / survived 1/20
+ *
+ * 15k kills/avg unreachable for hand-coded. Neural hits 18k max because
+ * the MLP learned sub-tick movement (when to stand still for thorns,
+ * when to pivot, when to absorb a hit) that explicit weights can't
+ * express. Exterminator's role: best available hand-coded baseline,
+ * slightly above strategist, with better upside ceiling.
  *
  * Strategy:
  *  1. Build-priority chooseUpgrade: sword_mastery → kill_shockwave →
- *      damage_1 stacks → sustain (regen, vampiric, hp) → explosive_fifth →
- *      magnet/thorns → heal_now spam (additive late-game heal).
- *  2. Brawler-like intention weights with mild cluster bias.
+ *     damage stacks → thorns → regen → vampiric → hp → explosive_fifth →
+ *     magnet → heal_now spam.
+ *  2. HP-band movement controller (dive/hold/defer) gated by level + walls.
  *  3. Strategist's summoner/shooter re-aim + charger dash evasion preserved.
  *  4. Cluster-centroid aim for sword melee.
  */
@@ -40,42 +61,56 @@ import { createUtilityPolicy, mergeWeights } from '../create-utility-policy.js';
 import { createUpgradeStrategy } from '../upgrade-strategy.js';
 import { BRAWLER_WEIGHTS } from './brawler.js';
 
+// Base weights near brawler (proven kill-throughput base). The stateful
+// HP-band controller in act() handles mode switching; weights are balanced
+// for the mid-HP engagement mode.
 const EXTERMINATOR_WEIGHTS = mergeWeights(BRAWLER_WEIGHTS, {
-  flee: 0.35,
-  kite: 0.3,
-  hold_range: 0.5,
-  reposition_for_shot: 0.9,
-  collapse_on_cluster: 2.5,
-  collect_xp: 0.6,
-  boss_focus: 1.5,
-  maintain_pressure: 2.8,
+  flee: 0.4,
+  kite: 0.4,
+  hold_range: 0.6,
+  reposition_for_shot: 1.0,
+  collapse_on_cluster: 2.3,
+  collect_xp: 0.7,
+  boss_focus: 1.3,
+  maintain_pressure: 2.5,
   hold_ground: 0.9,
 
-  dangerWeight: 0.4,
-  rewardWeight: 1.7,
+  dangerWeight: 0.5,
+  rewardWeight: 1.6,
 
-  survivalBias: 0.4,         // > 0.6 unlocks sword pick bonus, but we also force it
-  greedBias: 0.55,
-  preferredSpacing: 0.65,
-  pickupGreed: 0.4,
+  survivalBias: 0.4,
+  greedBias: 0.5,
+  preferredSpacing: 0.7,
+  pickupGreed: 0.45,
   clusterPreference: 0.9,
   bossFocus: 0.7,
-  commitmentTime: 13,
-  smoothingRate: 0.28,
-  intentionHysteresis: 0.18,
-  retreatThreshold: 0.2,
-  damageRiskTolerance: 0.75,
+  commitmentTime: 12,
+  smoothingRate: 0.30,
+  intentionHysteresis: 0.15,
+  retreatThreshold: 0.18,
+  damageRiskTolerance: 0.72,
   attackEagerness: 1.6,
 
   upgradeWeights: {
-    survivability: 2.0,
-    damage: 2.4,
-    aoe: 2.0,
-    speed: 0.5,
-    utility: 1.0,
-    scaling: 2.0,
+    survivability: 2.3,
+    damage: 2.3,
+    aoe: 2.2,
+    speed: 0.4,
+    utility: 1.1,
+    scaling: 2.1,
   },
 });
+
+// HP-band controller thresholds. The neural-trained policy learned to
+// engage aggressively above ~65% HP, hold near clusters at 30-65%, and
+// kite to recover below 30%.
+const HP_AGGRESSIVE = 0.65;   // above this: bias toward cluster
+const HP_HOLD       = 0.30;   // between HOLD and AGGRESSIVE: hold position, attack
+const HP_RECOVER    = 0.15;   // below HOLD: kite; below RECOVER: hard flee
+// Minimum cluster density required to trigger dive mode — avoids suicidal
+// charges at sparse early-game enemies.
+const DIVE_MIN_DENSITY = 5;
+const HOLD_MIN_DENSITY = 2;
 
 // Build priority — first match in choices wins, gated on per-id stack count.
 // Tier locks (see src/systems/skills.js): L1 = weapon, L2 = signature,
@@ -86,22 +121,26 @@ const EXTERMINATOR_WEIGHTS = mergeWeights(BRAWLER_WEIGHTS, {
 //         hp), then explosive_fifth/magnet/thorns. Once power pool drains,
 //         heal_now (maxStacks=99) becomes the only remaining option and
 //         provides indefinite sustain.
+// Build priority. Kill_shockwave at L2 (strictly better than berserker for
+// hand-coded — data: berserker runs 455 avg kills, kill_shockwave runs
+// 854 avg kills). Armor_thorns pulled earlier to slot 4 — thorns synergizes
+// with aggressive engagement (reflect damage when contacted).
 const BUILD_PRIORITY = [
   'sword_mastery',
-  'kill_shockwave',
+  'kill_shockwave',   // always-on AOE chain — best hand-coded signature
   'damage_1',         // 1st stack — +20% dmg, +stun
+  'armor_thorns',     // 1st stack — +15 contact reflect, +2 armor
   'regen_1',          // 1st stack — passive sustain
   'damage_1',         // 2nd stack
   'vampiric',         // 1st stack — kill-fed heal
   'hp_1',             // 1st stack — HP ceiling
   'damage_1',         // 3rd stack — caps at maxStacks=3
-  'explosive_fifth',  // chain multiplier on top of sword's high hit rate
+  'explosive_fifth',  // chain multiplier
+  'armor_thorns',     // 2nd stack — caps at maxStacks=2
   'magnet_1',         // 1st stack — pickup radius
-  'armor_thorns',     // 1st stack — passive contact DPS + 2 armor
   'vampiric',         // 2nd stack — caps at maxStacks=2
   'regen_1',          // 2nd stack — caps at maxStacks=2
   'hp_1',             // 2nd stack
-  'armor_thorns',     // 2nd stack — caps at maxStacks=2
   'magnet_1',         // 2nd stack
   'hp_1',             // 3rd stack
   'magnet_1',         // 3rd stack — caps at maxStacks=3
@@ -129,24 +168,58 @@ function createExterminatorPolicy(overrides = {}) {
     act(obs) {
       const action = base.act(obs);
 
-      // Pre-nova cluster-centroid aim: with sword/shotgun, biasing the aim
-      // into the densest sector multiplies hits per swing. Skip for nova
-      // (radial 360° pattern doesn't care about aim direction).
+      // ── HP-band movement controller ──
+      // Emulates the neural's learned behavior of aggressive engagement
+      // above 60% HP, holding near clusters at 30-60% (where kill_shockwave
+      // chains keep density manageable), kiting below 30% to let
+      // regen/vampiric heal, hard-flee below 15%.
+      const hp = obs.hpRatio;
+      const bestIdx = bestClusterSectorIndex(obs.sectorDensity);
+      const densestSector = bestIdx >= 0 ? obs.sectorDensity[bestIdx] : 0;
+
+      // Early-game gate: no HP-band controller until level 3+ (kill_shockwave
+      // + at least one tier-3 pick unlocked). Before that, the base planner's
+      // gentler movement is safer.
+      const bandEnabled = (obs.level || 0) >= 3;
+      // Wall gate: never dive with a wall at our back. Chargers + summoners
+      // exploit cornered players.
+      const nearWall = (obs.distToEdge || 999) < 180;
+
+      if (bandEnabled && !nearWall && hp > HP_AGGRESSIVE && densestSector >= DIVE_MIN_DENSITY) {
+        // Mode: dive. Only with a real cluster (5+ enemies in one sector).
+        // Gentle bias toward cluster — the base planner usually already
+        // wants the cluster, we just accelerate slightly.
+        const angle = (bestIdx / 8) * Math.PI * 2 - Math.PI;
+        const clusterDx = Math.cos(angle);
+        const clusterDy = Math.sin(angle);
+        action.dx = action.dx * 0.7 + clusterDx * 0.3;
+        action.dy = action.dy * 0.7 + clusterDy * 0.3;
+      } else if (bandEnabled
+                 && hp > HP_HOLD
+                 && densestSector >= HOLD_MIN_DENSITY
+                 && obs.nearestEnemyDist < obs.weaponRange * 1.1) {
+        // Mode: hold. Inside weapon range with a cluster — reduce motion
+        // slightly so kill_shockwave cascades hit closer-packed targets
+        // and vampiric procs keep pace with contact damage.
+        action.dx *= 0.6;
+        action.dy *= 0.6;
+      }
+      // Otherwise: defer to base planner (which already has flee/kite logic).
+
+      // Cluster-centroid aim: bias aim into densest sector (non-nova only).
       const clusteredSectors = countClusteredSectors(obs.sectorDensity);
       if (obs.weapon !== 'nova'
           && obs.weaponReady
-          && clusteredSectors >= 2) {
-        const bestIdx = bestClusterSectorIndex(obs.sectorDensity);
-        if (bestIdx >= 0 && obs.sectorDensity[bestIdx] >= 4) {
-          const angle = (bestIdx / 8) * Math.PI * 2 - Math.PI;
-          action.targetX = obs.playerX + Math.cos(angle) * CLUSTER_AIM_DISTANCE;
-          action.targetY = obs.playerY + Math.sin(angle) * CLUSTER_AIM_DISTANCE;
-        }
+          && clusteredSectors >= 2
+          && bestIdx >= 0
+          && obs.sectorDensity[bestIdx] >= 4) {
+        const angle = (bestIdx / 8) * Math.PI * 2 - Math.PI;
+        action.targetX = obs.playerX + Math.cos(angle) * CLUSTER_AIM_DISTANCE;
+        action.targetY = obs.playerY + Math.sin(angle) * CLUSTER_AIM_DISTANCE;
       }
 
       // Strategist priority re-aim: summoners (one kill removes ~12 future
-      // enemies) and shooters (chip damage prevention) take precedence over
-      // cluster aim when in range and weapon is ready.
+      // enemies) and shooters (chip damage) take precedence over cluster aim.
       const priority = pickPriorityTarget(obs);
       if (priority
           && obs.weaponReady
@@ -172,14 +245,22 @@ function createExterminatorPolicy(overrides = {}) {
         action.dy = perpY;
       }
 
+      // Renormalize movement vector if band controller inflated it.
+      const mag = Math.hypot(action.dx, action.dy);
+      if (mag > 1) {
+        action.dx /= mag;
+        action.dy /= mag;
+      }
+
       return action;
     },
 
     chooseUpgrade(choices, obs) {
       if (!choices || choices.length === 0) return null;
 
-      // Emergency heal at low HP.
-      if (obs.hpRatio < 0.4) {
+      // Emergency heal at critical HP — heal_now gives +25% max HP instantly.
+      // Only trigger below 25% to avoid wasting heals when berserker is firing.
+      if (obs.hpRatio < 0.25) {
         const heal = choices.find(c => c.healOnPickup);
         if (heal) return heal.id;
       }
