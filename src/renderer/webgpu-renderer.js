@@ -349,7 +349,7 @@ export function createWebGPURenderer(canvas) {
       canvas.height = rect.height * dpr;
 
       // Low-res offscreen for pixel creatures (matches Canvas 2D renderer)
-      const RENDER_HEIGHT = 270;
+      const RENDER_HEIGHT = 540;
       const aspect = rect.width / rect.height || 16 / 9;
       renderH = RENDER_HEIGHT;
       renderW = Math.round(renderH * aspect);
