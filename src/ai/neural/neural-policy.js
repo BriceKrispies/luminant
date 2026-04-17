@@ -65,8 +65,9 @@ const COMMIT_FRAMES = 6;           // minimum frames before allowing sharp direc
 const REVERSAL_THRESHOLD = -0.5;   // dot product below this = sharp reversal
 const AIM_OFFSET_SCALE = Math.PI / 4; // max ±45° aim offset (was full PI)
 const ATTACK_RANGE_GATE = 1.3;     // only attack if nearest enemy < weaponRange * this
-const WALL_REPEL_DIST = 120;       // start pushing away from walls at this distance
-const WALL_REPEL_STRENGTH = 0.6;   // how much wall repulsion overrides network output
+const WALL_REPEL_DIST = 120;       // start dampening into-wall movement at this distance
+const WALL_HARD_DIST = 30;         // inside this, force escape regardless of network output
+const WALL_REPEL_STRENGTH = 0.6;   // escape magnitude when forced out of the hard zone
 
 /**
  * Create a neural policy.
@@ -130,27 +131,51 @@ function createNeuralPolicy(params = {}) {
       const attackSignal = sigmoid(out[2]);
       const aimOffset = tanh(out[3]) * AIM_OFFSET_SCALE;
 
-      // ── Wall repulsion ──
-      // Push away from edges so the AI doesn't corner itself
+      // ── Wall handling ──
+      // Clamp-style: never let the raw output drive us INTO a wall when close.
+      // Soft zone: dampen into-wall movement proportionally to proximity.
+      // Hard zone: force an escape component and break commitment so the
+      // EMA smoother accepts the reversal immediately.
       const worldW = obs.worldW || 4096;
       const worldH = obs.worldH || 4096;
       const px = obs.playerX;
       const py = obs.playerY;
+      let forcedEscape = false;
 
       if (px < WALL_REPEL_DIST) {
-        const t = 1 - px / WALL_REPEL_DIST; // 0 at threshold, 1 at wall
-        rawDx += t * WALL_REPEL_STRENGTH;
+        const proximity = 1 - px / WALL_REPEL_DIST; // 0 at threshold → 1 at wall
+        if (rawDx < 0) rawDx *= Math.max(0, 1 - proximity);
+        if (px < WALL_HARD_DIST) {
+          rawDx = Math.max(rawDx, WALL_REPEL_STRENGTH);
+          forcedEscape = true;
+        }
       } else if (px > worldW - WALL_REPEL_DIST) {
-        const t = 1 - (worldW - px) / WALL_REPEL_DIST;
-        rawDx -= t * WALL_REPEL_STRENGTH;
+        const proximity = 1 - (worldW - px) / WALL_REPEL_DIST;
+        if (rawDx > 0) rawDx *= Math.max(0, 1 - proximity);
+        if ((worldW - px) < WALL_HARD_DIST) {
+          rawDx = Math.min(rawDx, -WALL_REPEL_STRENGTH);
+          forcedEscape = true;
+        }
       }
       if (py < WALL_REPEL_DIST) {
-        const t = 1 - py / WALL_REPEL_DIST;
-        rawDy += t * WALL_REPEL_STRENGTH;
+        const proximity = 1 - py / WALL_REPEL_DIST;
+        if (rawDy < 0) rawDy *= Math.max(0, 1 - proximity);
+        if (py < WALL_HARD_DIST) {
+          rawDy = Math.max(rawDy, WALL_REPEL_STRENGTH);
+          forcedEscape = true;
+        }
       } else if (py > worldH - WALL_REPEL_DIST) {
-        const t = 1 - (worldH - py) / WALL_REPEL_DIST;
-        rawDy -= t * WALL_REPEL_STRENGTH;
+        const proximity = 1 - (worldH - py) / WALL_REPEL_DIST;
+        if (rawDy > 0) rawDy *= Math.max(0, 1 - proximity);
+        if ((worldH - py) < WALL_HARD_DIST) {
+          rawDy = Math.min(rawDy, -WALL_REPEL_STRENGTH);
+          forcedEscape = true;
+        }
       }
+
+      // When forced to escape, reset commitment so the reversal isn't
+      // blocked by the anti-flicker guard below.
+      if (forcedEscape) commitCounter = COMMIT_FRAMES;
 
       // ── Movement smoothing (EMA + commitment) ──
       // Check for sharp reversals — if committed to a direction, resist flipping
