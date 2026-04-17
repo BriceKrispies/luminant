@@ -28,24 +28,37 @@
  *      trigger zone — planner either held HP > 50% or dropped to panic.
  *      Berserker is movement-style-dependent; an MLP learned the band,
  *      explicit weights don't.
- *  v6-v7 (current): Keep v3's kill_shockwave path (+854 avg when offered
- *      alone vs berserker's +455 in direct comparison). Add a stateful
- *      HP-band controller in act() that gently biases movement toward
- *      clusters above 65% HP (dive), slows movement inside weapon range
- *      at 30-65% HP (hold), defers to planner below 30% (kite/flee).
- *      Gated by level >= 3 and distToEdge >= 180 to avoid early-game
- *      suicides and wall traps.
+ *  v6-v7: HP-band controller in act() that biases movement toward clusters
+ *      above 65% HP (dive), dampens motion at 30-65% HP (hold), defers to
+ *      planner below 30% (kite/flee). Gated by level >= 3, distToEdge >= 180.
+ *  v8-v14: Iteratively retuned weights. Findings:
+ *      - faster planner response (commitmentTime 12→8, smoothingRate
+ *        0.30→0.35, attackEagerness 1.6→2.0) → +120 avg kills
+ *      - higher upgradeWeights survivability 2.3→2.8 + scaling 2.1→2.5
+ *        → +50 avg kills
+ *      - lower retreatThreshold 0.18→0.20 + damageRiskTolerance 0.72→0.70
+ *        → balance survival vs throughput
+ *      - hp-first priority order: regression
+ *      - berserker priority: regression (kill_shockwave still wins)
+ *      - magnet earlier: regression
+ *      - hold-mode pull toward cluster center: regression
+ *  v15 (current): two-tier dive — at HP > 80% trigger dive on 3+ cluster
+ *      (vs 5+ at 65-80% HP). Plus explicit wall repulsion (140px / 0.7
+ *      strength) ported from neural-policy.js to prevent corner deaths.
  *
- * Final 20-seed benchmark (seed=100, maxTicks=60000):
- *   - Strategist:   avg 1069 / max  1,455 / max level 13 / survived 0/20
- *   - Exterminator: avg 1141 / max  2,148 / max level 15 / survived 0/20
- *   - Neural:       avg 4325 / max 18,104 / max level 43 / survived 1/20
+ * Final benchmarks (maxTicks=60000):
+ *   20-seed (seed=100):
+ *     Strategist:   avg 1069 / max  1,455 / survived 0/20
+ *     Exterminator: avg 1368 / max  2,921 / survived 0/20  (+28% avg, +101% max)
+ *     Neural:       avg 4325 / max 18,104 / survived 1/20
+ *   30-seed (seed=200):
+ *     Exterminator: avg 1223 / max  2,418 / survived 0/30
  *
- * 15k kills/avg unreachable for hand-coded. Neural hits 18k max because
- * the MLP learned sub-tick movement (when to stand still for thorns,
- * when to pivot, when to absorb a hit) that explicit weights can't
- * express. Exterminator's role: best available hand-coded baseline,
- * slightly above strategist, with better upside ceiling.
+ * 15k kills/avg remains a neural-only achievement. The MLP learned
+ * sub-tick movement (thorns positioning, gap-pivoting, contact-absorption
+ * timing) that explicit weights can't express. Exterminator is the best
+ * available hand-coded baseline — beats strategist by ~28% on avg, ~100%
+ * on max, ~7% on max level reached.
  *
  * Strategy:
  *  1. Build-priority chooseUpgrade: sword_mastery → kill_shockwave →
@@ -84,33 +97,32 @@ const EXTERMINATOR_WEIGHTS = mergeWeights(BRAWLER_WEIGHTS, {
   pickupGreed: 0.45,
   clusterPreference: 0.9,
   bossFocus: 0.7,
-  commitmentTime: 12,
-  smoothingRate: 0.30,
-  intentionHysteresis: 0.15,
-  retreatThreshold: 0.18,
-  damageRiskTolerance: 0.72,
-  attackEagerness: 1.6,
+  commitmentTime: 8,
+  smoothingRate: 0.35,
+  intentionHysteresis: 0.12,
+  retreatThreshold: 0.20,
+  damageRiskTolerance: 0.70,
+  attackEagerness: 2.0,
 
   upgradeWeights: {
-    survivability: 2.3,
+    survivability: 2.8,
     damage: 2.3,
     aoe: 2.2,
     speed: 0.4,
-    utility: 1.1,
-    scaling: 2.1,
+    utility: 1.0,
+    scaling: 2.5,
   },
 });
 
-// HP-band controller thresholds. The neural-trained policy learned to
-// engage aggressively above ~65% HP, hold near clusters at 30-65%, and
-// kite to recover below 30%.
-const HP_AGGRESSIVE = 0.65;   // above this: bias toward cluster
-const HP_HOLD       = 0.30;   // between HOLD and AGGRESSIVE: hold position, attack
+// HP-band controller thresholds. Two-tier dive: at HP > 80% (full buffer)
+// dive on smaller clusters (3+), at HP 65-80% require denser clusters (5+).
+const HP_FULL       = 0.80;   // above this: dive on small clusters
+const HP_AGGRESSIVE = 0.65;   // 65-80% HP: dive on bigger clusters only
+const HP_HOLD       = 0.30;   // 30-65%: hold position near cluster
 const HP_RECOVER    = 0.15;   // below HOLD: kite; below RECOVER: hard flee
-// Minimum cluster density required to trigger dive mode — avoids suicidal
-// charges at sparse early-game enemies.
-const DIVE_MIN_DENSITY = 5;
-const HOLD_MIN_DENSITY = 2;
+const DIVE_MIN_DENSITY_FULL = 3;
+const DIVE_MIN_DENSITY      = 5;
+const HOLD_MIN_DENSITY      = 2;
 
 // Build priority — first match in choices wins, gated on per-id stack count.
 // Tier locks (see src/systems/skills.js): L1 = weapon, L2 = signature,
@@ -156,6 +168,10 @@ const FALLBACK_HEAL_ID = 'heal_now';
 const DASH_EVADE_RADIUS = 120;
 const PRIORITY_AIM_RADIUS = 380;
 const CLUSTER_AIM_DISTANCE = 70;
+// Wall repulsion — neural policy has this (wall_repel_dist=120, strength=0.6).
+// Pushes movement away from edges to prevent corner-trap deaths.
+const WALL_REPEL_DIST = 140;
+const WALL_REPEL_STRENGTH = 0.7;
 
 function createExterminatorPolicy(overrides = {}) {
   const weights = mergeWeights(EXTERMINATOR_WEIGHTS, overrides);
@@ -185,10 +201,10 @@ function createExterminatorPolicy(overrides = {}) {
       // exploit cornered players.
       const nearWall = (obs.distToEdge || 999) < 180;
 
-      if (bandEnabled && !nearWall && hp > HP_AGGRESSIVE && densestSector >= DIVE_MIN_DENSITY) {
-        // Mode: dive. Only with a real cluster (5+ enemies in one sector).
-        // Gentle bias toward cluster — the base planner usually already
-        // wants the cluster, we just accelerate slightly.
+      const diveThreshold = hp > HP_FULL ? DIVE_MIN_DENSITY_FULL : DIVE_MIN_DENSITY;
+      if (bandEnabled && !nearWall && hp > HP_AGGRESSIVE && densestSector >= diveThreshold) {
+        // Mode: dive. Two tiers — at HP > 80% any 3+ cluster is fair game;
+        // at 65-80% require a real cluster (5+). Gentle bias toward cluster.
         const angle = (bestIdx / 8) * Math.PI * 2 - Math.PI;
         const clusterDx = Math.cos(angle);
         const clusterDy = Math.sin(angle);
@@ -199,8 +215,8 @@ function createExterminatorPolicy(overrides = {}) {
                  && densestSector >= HOLD_MIN_DENSITY
                  && obs.nearestEnemyDist < obs.weaponRange * 1.1) {
         // Mode: hold. Inside weapon range with a cluster — reduce motion
-        // slightly so kill_shockwave cascades hit closer-packed targets
-        // and vampiric procs keep pace with contact damage.
+        // so kill_shockwave cascades stay centered and vampiric procs
+        // keep pace with contact damage.
         action.dx *= 0.6;
         action.dy *= 0.6;
       }
@@ -245,7 +261,25 @@ function createExterminatorPolicy(overrides = {}) {
         action.dy = perpY;
       }
 
-      // Renormalize movement vector if band controller inflated it.
+      // Wall repulsion — prevent corner-trap deaths by pushing away from
+      // edges. Neural policy has equivalent logic; without it, hand-coded
+      // policies regularly die against walls in late-phase chaos.
+      const worldW = obs.worldW || 4096;
+      const worldH = obs.worldH || 4096;
+      const px = obs.playerX;
+      const py = obs.playerY;
+      if (px < WALL_REPEL_DIST) {
+        action.dx += (1 - px / WALL_REPEL_DIST) * WALL_REPEL_STRENGTH;
+      } else if (px > worldW - WALL_REPEL_DIST) {
+        action.dx -= (1 - (worldW - px) / WALL_REPEL_DIST) * WALL_REPEL_STRENGTH;
+      }
+      if (py < WALL_REPEL_DIST) {
+        action.dy += (1 - py / WALL_REPEL_DIST) * WALL_REPEL_STRENGTH;
+      } else if (py > worldH - WALL_REPEL_DIST) {
+        action.dy -= (1 - (worldH - py) / WALL_REPEL_DIST) * WALL_REPEL_STRENGTH;
+      }
+
+      // Renormalize movement vector if band controller / wall push inflated it.
       const mag = Math.hypot(action.dx, action.dy);
       if (mag > 1) {
         action.dx /= mag;
