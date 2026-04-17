@@ -9,10 +9,12 @@
  */
 
 import { UPGRADE_POOL } from '../content/upgrade-pool.js';
+import { getArchetype } from '../content/archetypes.js';
 
 export function createSkillSystem(player, weapons) {
   const acquired = [];         // upgrade IDs picked (may repeat for stacks)
   let levelUpCount = 0;        // how many level-ups have been processed
+  let archetypeId = null;      // applied once per run, before any upgrades
 
   let statBonuses = freshStats();
   const effects = new Set();   // active behavioral effect names
@@ -43,6 +45,15 @@ export function createSkillSystem(player, weapons) {
 
   function recalcStats() {
     const b = freshStats();
+
+    // Archetype contribution (applied before upgrades).
+    const arch = archetypeId ? getArchetype(archetypeId) : null;
+    if (arch && arch.stats) {
+      const s = arch.stats;
+      if (s.armor) b.armor += s.armor;
+      if (s.regenRate) b.regenRate += s.regenRate;
+      if (s.pickupRadius) b.pickupRadius += s.pickupRadius;
+    }
 
     for (const id of acquired) {
       const upg = UPGRADE_POOL.find(u => u.id === id);
@@ -144,6 +155,24 @@ export function createSkillSystem(player, weapons) {
       return shuffled.slice(0, count);
     },
 
+    /**
+     * Apply a run-start archetype. Sets starting weapon and stat modifiers.
+     * Safe no-op if id is unknown. Must be called before the tick loop.
+     */
+    applyArchetype(id) {
+      const arch = getArchetype(id);
+      if (!arch) return;
+      archetypeId = arch.id;
+      if (arch.weapon) weapons.currentWeapon = arch.weapon;
+      const s = arch.stats || {};
+      if (s.maxHpBonus) player.modifyMaxHP(s.maxHpBonus);
+      if (s.speedBonus) player.modifySpeed(s.speedBonus);
+      // Stats that flow through recalcStats are picked up automatically there.
+      recalcStats();
+    },
+
+    get archetypeId() { return archetypeId; },
+
     applyUpgrade(upgradeId) {
       acquired.push(upgradeId);
       const upg = UPGRADE_POOL.find(u => u.id === upgradeId);
@@ -179,6 +208,7 @@ export function createSkillSystem(player, weapons) {
     reset() {
       acquired.length = 0;
       levelUpCount = 0;
+      archetypeId = null;
       statBonuses = freshStats();
       effects.clear();
       for (const k in effectData) delete effectData[k];

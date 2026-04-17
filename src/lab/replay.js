@@ -34,6 +34,33 @@ import { runGame } from '../ai/game-runner.js';
 import { createBotPolicy, deserializeBotConfig } from './bot.js';
 import { computeRewardBreakdown } from './rewards.js';
 import { createRunRecorder } from './run-recorder.js';
+import { makeRequestId } from '../decisions/types.js';
+
+/**
+ * Convert a legacy upgradeChoices array (from older artifacts) into a
+ * decisionHistory array compatible with the scripted-mode replay path.
+ */
+function synthesizeScriptFromArtifact(artifact) {
+  if (Array.isArray(artifact.decisionHistory) && artifact.decisionHistory.length > 0) {
+    return artifact.decisionHistory;
+  }
+  const seed = artifact.seed || 0;
+  const upgrades = artifact.upgradeChoices || artifact.upgradeHistory || [];
+  const perTickCounter = new Map();
+  return upgrades.map(u => {
+    const tick = u.tick || 0;
+    const counter = perTickCounter.get(tick) || 0;
+    perTickCounter.set(tick, counter + 1);
+    return {
+      requestId: makeRequestId('upgrade', seed, tick, counter),
+      kind: 'upgrade',
+      tick,
+      choiceId: u.chosen,
+      optionIds: u.options || [],
+      source: 'policy',
+    };
+  });
+}
 
 /**
  * Replay a recorded run from its artifact.
@@ -84,48 +111,39 @@ export async function replayRun(artifact, options = {}) {
 
 /**
  * Replay with forced upgrade choices from the original run.
- * Creates a wrapper policy that overrides chooseUpgrade with
- * the recorded sequence.
+ *
+ * Uses the decision manager's 'scripted' mode: each decision request is
+ * matched against the recorded decisionHistory (or synthesized from legacy
+ * upgradeChoices) by requestId + optionIds. On drift, logs and falls through
+ * to the base policy rather than throwing — so code changes between record
+ * and replay produce a diagnostic, not a crash.
  *
  * @param {Object} artifact — run artifact
- * @param {Object} [options] — same as replayRun
+ * @param {Object} [options] — same as replayRun; also accepts onDrift(req, recorded, reason)
  * @returns {Object}
  */
 export async function replayWithForcedUpgrades(artifact, options = {}) {
-  const { wasm, maxTicks = 30000, silent = true } = options;
+  const { wasm, maxTicks = 30000, silent = true, onDrift = null } = options;
 
   const botConfig = deserializeBotConfig(artifact.botConfig);
   const basePolicy = createBotPolicy(botConfig);
 
-  // Upgrade sequence from the original run
-  const upgradeSequence = (artifact.upgradeChoices || []).map(u => u.chosen);
-  let upgradeIndex = 0;
-
-  const forcedPolicy = {
-    ...basePolicy,
-    name: basePolicy.name + ' (forced)',
-    id: basePolicy.id + '-forced',
-
-    chooseUpgrade(choices, obs) {
-      if (upgradeIndex < upgradeSequence.length) {
-        const forced = upgradeSequence[upgradeIndex++];
-        // Only use the forced choice if it's actually available
-        if (choices.some(c => c.id === forced)) {
-          return forced;
-        }
-      }
-      return basePolicy.chooseUpgrade(choices, obs);
-    },
-  };
+  const drifts = [];
+  const decisionScript = synthesizeScriptFromArtifact(artifact);
 
   const result = await runGame({
-    policy: forcedPolicy,
+    policy: basePolicy,
     seed: artifact.seed,
     maxTicks,
     wasm,
     recordSnapshots: true,
     snapshotInterval: artifact.snapshotInterval || 300,
     silent,
+    decisionScript,
+    onDecisionDrift: (req, recorded, reason) => {
+      drifts.push({ requestId: req && recorded ? recorded.requestId : null, reason });
+      if (onDrift) onDrift(req, recorded, reason);
+    },
   });
 
   const rewardBreakdown = computeRewardBreakdown(result);
@@ -135,6 +153,7 @@ export async function replayWithForcedUpgrades(artifact, options = {}) {
     result,
     verification,
     reward: rewardBreakdown,
+    drifts,
   };
 }
 

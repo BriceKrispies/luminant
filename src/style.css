@@ -647,6 +647,76 @@ html, body {
   to   { width: 0%; }
 }
 
+/* ── Archetype Picker (blocking, run-start) ── */
+#archetype-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 15;
+  pointer-events: all;
+}
+
+.archetype-picker-modal {
+  max-width: 720px;
+  padding: 32px 24px;
+  text-align: center;
+  animation: picker-slide-up 0.35s ease-out;
+}
+
+.archetype-picker-title {
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 24px;
+  letter-spacing: 0.05em;
+}
+
+.archetype-picker-row {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.archetype-picker-card {
+  min-width: 150px;
+  max-width: 180px;
+  padding: 20px 16px;
+  background: rgba(10, 15, 30, 0.9);
+  border: 1px solid rgba(100, 180, 255, 0.3);
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.archetype-picker-card:hover,
+.archetype-picker-card:active {
+  border-color: rgba(100, 180, 255, 0.7);
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(100, 180, 255, 0.3);
+}
+
+.archetype-picker-card.picked {
+  border-color: rgba(100, 255, 120, 0.7);
+  background: rgba(40, 100, 60, 0.55);
+  transform: scale(1.05);
+}
+
+.archetype-picker-card-name {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.archetype-picker-card-desc {
+  color: #9bc;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
 /* ── Debug overlay ── */
 #debug-overlay {
   position: absolute;

@@ -31,10 +31,14 @@ import { addEffect, updateEffects, clearEffects } from './renderer/effects.js';
 import { createGameOverUI } from './ui/game-over.js';
 import { createMenuUI } from './ui/menu.js';
 import { createUpgradePicker } from './ui/upgrade-picker.js';
+import { createArchetypePicker } from './ui/archetype-picker.js';
 import { createHUD } from './ui/hud.js';
 import { createAppState, AppState } from './ui/state.js';
 import { WEAPON_DEFS } from './content/weapon-types.js';
 import { UPGRADE_POOL } from './content/upgrade-pool.js';
+import { createDecisionManager } from './decisions/manager.js';
+import { DecisionKind, DecisionMode } from './decisions/types.js';
+import { ARCHETYPES, DEFAULT_ARCHETYPE_ID } from './content/archetypes.js';
 
 // Utility-based policies are registered via player-ai-system.js imports.
 // Legacy policies (survival, progression) are also imported there.
@@ -169,15 +173,38 @@ async function main() {
   const autoUpgradesEl = document.getElementById('auto-upgrades');
 
   const upgradePicker = createUpgradePicker(
-    document.getElementById('upgrade-picker'),
-    {
-      autoPlayer,
-      onPick(upgradeId, level) {
-        skills.applyUpgrade(upgradeId);
-        logUpgrade(upgradeId, level);
-      },
-    }
+    document.getElementById('upgrade-picker')
   );
+  const archetypePicker = createArchetypePicker(
+    document.getElementById('archetype-picker')
+  );
+
+  // Composite presenter — dispatches to the right picker by decision kind.
+  // Keeps the manager API simple (one presenter slot) while allowing many UIs.
+  const compositePresenter = {
+    present(request, options, resolve) {
+      if (request.kind === DecisionKind.ARCHETYPE) {
+        archetypePicker.present(request, options, resolve);
+      } else {
+        upgradePicker.present(request, options, resolve);
+      }
+    },
+    cancel() {
+      archetypePicker.cancel();
+      upgradePicker.cancel();
+    },
+  };
+
+  // Decision manager — live mode. Presenter renders UI; manager owns queue
+  // and deadline; timeout falls through to autoPlayer.chooseUpgrade (policy).
+  let latestDecisionObs = null;
+  const decisions = createDecisionManager({
+    mode: DecisionMode.LIVE,
+    policy: autoPlayer,
+    presenter: compositePresenter,
+    seed: 0,
+    onObservation: () => latestDecisionObs,
+  });
 
   function logUpgrade(upgradeId, level) {
     const upgDef = UPGRADE_POOL.find(u => u.id === upgradeId);
@@ -195,7 +222,9 @@ async function main() {
     gameOver = false;
     autoPlayer.enabled = false;
     input.setOverride(null);
+    decisions.cancelAll();
     upgradePicker.reset();
+    archetypePicker.reset();
     autoUpgradesEl.classList.add('hidden');
     autoUpgradesEl.innerHTML = '';
     hud.hide();
@@ -225,12 +254,32 @@ async function main() {
     autoPlayer.setPolicy('exterminator');
     autoPlayer.reset();
     input.setOverride(null);
+    decisions.cancelAll();
     upgradePicker.reset();
+    archetypePicker.reset();
     autoUpgradesEl.classList.remove('hidden');
     autoUpgradesEl.innerHTML = '';
 
     hud.show();
-    appState.setScreen(AppState.PLAYING);
+
+    // Run-start archetype decision. Blocks simulation via decisions.blocking
+    // until the player picks (or 10s deadline fires and policy auto-picks).
+    appState.setScreen(AppState.ARCHETYPE_SELECT);
+    decisions.request({
+      kind: DecisionKind.ARCHETYPE,
+      tick: 0,
+      optionsFn: () => ARCHETYPES.map(a => ({
+        id: a.id, label: a.name, meta: { desc: a.desc },
+      })),
+      context: { phase: 'run-start' },
+      defaultChoiceId: DEFAULT_ARCHETYPE_ID,
+      blocking: true,
+      deadlineMs: 10000,
+    }, (result) => {
+      if (!result || !result.choiceId) return;
+      skills.applyArchetype(result.choiceId);
+      appState.setScreen(AppState.PLAYING);
+    });
   }
 
   // ── Step 3: Main loop (always runs for rendering, simulation only when playing) ──
@@ -241,6 +290,13 @@ async function main() {
     if (appState.screen === AppState.PAUSED) return;
 
     const steps = clock.update(nowMs);
+
+    // Advance decision timers even while blocking (so deadline fires).
+    for (const dt of steps) decisions.tick(dt);
+
+    // If a blocking decision is active (e.g. archetype select), skip the
+    // simulation step — but continue to render so the overlay animates.
+    if (decisions.blocking) return;
 
     for (const dt of steps) {
       // Auto-player: compute AI input and inject as override
@@ -371,14 +427,31 @@ async function main() {
       // Camera — static arena view, still updates shake/impulse
       camera.update(dt);
 
-      // Level-up — enqueue choices for the on-screen picker
-      if (xpSystem.pendingLevelUps > 0) {
-        const choices = skills.getUpgradeChoices(3);
-        if (choices.length > 0) {
-          xpSystem.consumeLevelUp();
-          feedback.emit({ type: 'levelup', x: pp.x, y: pp.y });
-          upgradePicker.enqueue(choices, xpSystem.level);
-        }
+      // Level-up — enqueue decision requests. Options are rolled lazily so
+      // each card row reflects the stats produced by earlier picks in queue.
+      while (xpSystem.pendingLevelUps > 0) {
+        xpSystem.consumeLevelUp();
+        feedback.emit({ type: 'levelup', x: pp.x, y: pp.y });
+        const levelForPick = xpSystem.level;
+        decisions.request({
+          kind: DecisionKind.UPGRADE,
+          tick: Math.round(clock.totalTime * 60),
+          optionsFn: () => {
+            const choices = skills.getUpgradeChoices(3);
+            return choices.map(c => ({
+              id: c.id,
+              label: c.name,
+              meta: { tier: c.tier, desc: c.desc },
+            }));
+          },
+          context: { level: levelForPick },
+          defaultChoiceId: null,
+          deadlineMs: 5000,
+        }, (result) => {
+          if (!result || !result.choiceId) return;
+          skills.applyUpgrade(result.choiceId);
+          logUpgrade(result.choiceId, levelForPick);
+        });
       }
 
       // Death check

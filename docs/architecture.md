@@ -21,6 +21,9 @@ Luminant is a top-down survival-action game built with:
 │             │               │  AI / Policy Layer        │
 │             │               │  Observations · Policies  │
 │             │               │  Scoring · Evolution      │
+│             │               ├───────────────────────────┤
+│             │               │  Decisions (headless-ok)  │
+│             │               │  Archetype · Upgrade · …  │
 ├─────────────┴───────┬───────┴───────────────────────────┤
 │            Engine Bindings (JS ↔ WASM bridge)           │
 ├─────────────────────┴───────────────────────────────────┤
@@ -99,6 +102,27 @@ Policies are weight profiles, not separate AI implementations:
 `create-utility-policy.js` is the shared factory that wires sensors → scorer → planner
 for any weight profile. All utility policies register via the standard `registerPolicy()`
 system and are selectable from the menu alongside legacy policies.
+
+### Decision System (`src/decisions/`)
+
+Headless-first decision layer shared by live game and headless harness. Gameplay
+systems request a decision without knowing how it will be resolved.
+
+- `types.js` — `DecisionRequest { kind, tick, optionsFn (lazy), context, defaultChoiceId, blocking?, deadlineMs? }`, `DecisionResult { requestId, kind, tick, choiceId, optionIds, source }`, `DecisionKind`, `DecisionSource`, `DecisionMode`, `makeRequestId(kind, seed, tick, counter)`. No DOM / engine / renderer imports.
+- `manager.js` — `createDecisionManager({ mode, policy, presenter?, seed, history, script?, onDrift?, onObservation })`. API: `requestSync(req)`, `request(req, onResolved)`, `tick(dt)`, `cancelAll()`, `blocking`, `pending`, `history`.
+
+Three modes:
+- `policy` (headless) — `requestSync` dispatches to `policy.decide(req, obs)` then `policy.chooseUpgrade` compat shim then `defaultChoiceId`. Synchronous, zero-alloc in hot path.
+- `live` (browser) — `request` defers to an injected presenter; manager owns queue and deadline. On timeout, falls through to policy resolution.
+- `scripted` (replay) — matches requests against a recorded `decisionHistory` by `requestId` + `optionIds`. Drift → log once per class + fall through to policy.
+
+Options are evaluated **lazily** (`optionsFn` is invoked at resolution time) so a queued decision reflects the stats produced by earlier decisions in the same tick.
+
+Request ids are `${kind}:${seed}:${tick}:${counter}` — deterministic per seed + tick, counter increments within a tick.
+
+Live-mode presenters (`src/ui/upgrade-picker.js`, `src/ui/archetype-picker.js`) implement `{ present(req, options, resolve), cancel() }`. `main.js` wires both through a small composite presenter that dispatches by `request.kind`.
+
+**First new decision kind — player archetype.** `src/content/archetypes.js` defines run-start archetypes (balanced, warrior, ranger, mystic). `skills.applyArchetype(id)` applies starting weapon + stat modifiers and is called before the tick loop in both `game-runner.js` and `main.js`. `AppState.ARCHETYPE_SELECT` gates the main loop via `decisions.blocking` while the player picks.
 
 ### Renderer (`src/renderer/`)
 - `renderer-interface.js` — backend contract (id, name, init, resize, render, dispose)

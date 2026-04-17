@@ -14,7 +14,8 @@ The game is auto-mode only — AI policies control the player, there is no manua
 - **Creatures**: Pixel-art creature rendering (`src/renderer/creatures/`) — archetypes, world-space pixel drawing, deformations, visual progression
 - **Skeletal Animation**: Custom 2D skeletal interpolation + skinned-mesh animation engine (`src/animation/`) — skeleton, pose, clip, sampler, blend, constraints, IK, mesh skinning, rig controller, runtime
 - **Content**: Data definitions (`src/content/`), rigged character data (`src/content/rigs/`, `src/content/animations/`)
-- **UI**: Menu, DOM HUD, level-up, game-over, upgrade picker (`src/ui/`)
+- **UI**: Menu, DOM HUD, level-up, game-over, upgrade picker, archetype picker (`src/ui/`)
+- **Decisions**: Headless-first decision layer for archetype / upgrade / future shop-event picks (`src/decisions/`) — shared between live game and headless harness
 - **Harnesses**: Headless, benchmark, batch sim, evolution (`harness/`)
 - **Simulation Lab**: Offline bot experimentation, reward shaping, lineage tracking, replay, upgrade analytics (`src/lab/`, `harness/simulation-lab.js`, `debug/simulation-lab.html`)
 - **Experiment Lab**: Structured experiment/training architecture — featurizer, moments, trajectories, evolutionary training, population analysis (`src/lab/`, `harness/experiment.js`, `debug/experiment-lab.html`)
@@ -33,6 +34,7 @@ See `docs/architecture.md` for full layout.
 | Engine Bindings | WASM memory | WASM memory (via exports) | DOM, canvas |
 | Game Systems | Engine bindings | Engine bindings | Canvas, DOM (except UI) |
 | Renderer | Snapshots, camera | Canvas pixels | Engine memory |
+| Decisions | Policy, injected presenter | Decision history, choiceId | Engine memory, DOM, Canvas |
 | Simulation Lab | Game-runner results, artifacts | JSON artifacts, analytics | Engine memory, DOM, Canvas |
 
 ## WAT ↔ JS Interface
@@ -145,6 +147,7 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 9. A canvas element can only have one context type — renderer manager replaces it on switch
 10. Elite system exposes `_activeEliteIds()` for AI boss-tracking context
 11. Camera is a static arena-fit view (centered on world, zoomed to fit world bounds) — it does not follow the player. `fitWorld()` runs at init and on resize; `update()` drives only shake/impulse.
+12. Decisions never block the headless tick loop — `requestSync` always returns within the same call. Only `live` mode defers, and the main loop gates itself on `decisions.blocking` so rendering continues while simulation pauses. `src/decisions/**` never imports from `src/engine/`, `src/renderer/`, or `src/ui/`.
 
 ## AI / Policy System
 
@@ -189,6 +192,38 @@ Neuroevolution-trained feedforward network as a drop-in policy replacement.
 - **Topology**: [53, 32, 16, 4] = 2,324 parameters. 53 inputs from sensor layer, 4 raw outputs mapped to actions.
 - **Diagnostics**: Neural policy attaches `_neuralDebug` to actions (same pattern as utility's `_intention`). Debug overlay (F3) shows behavioral state, stuck counter, raw outputs, and key sensor metrics when neural policy is active.
 - **In-game**: Neural is the default policy in `main.js`. Brawler and other utility policies remain available for batch sim/evolve harnesses.
+
+## Decision System (`src/decisions/`)
+
+Headless-first decision layer. Gameplay systems request a decision (archetype at run start, upgrade at level-up, future shop/event picks) without knowing whether the resolver is a live UI, a policy, or a recorded replay script.
+
+**Modules:**
+- `types.js` — `DecisionRequest { kind, tick, optionsFn (lazy), context, defaultChoiceId, blocking?, deadlineMs? }`, `DecisionResult { requestId, kind, tick, choiceId, optionIds, source }`, `DecisionKind` (`'archetype' | 'upgrade'`), `DecisionSource` (`'human' | 'policy' | 'default' | 'scripted'`), `DecisionMode` (`'policy' | 'live' | 'scripted'`), `makeRequestId(kind, seed, tick, counter)`.
+- `manager.js` — `createDecisionManager({ mode, policy, presenter?, seed, history, script?, onDrift?, onObservation })`. Exposes `requestSync(req)`, `request(req, onResolved)`, `tick(dt)`, `cancelAll()`, `blocking`, `pending`, `history`.
+
+**Modes:**
+- **`policy`** (headless) — `requestSync` calls `policy.decide(req, obs)`, falling back to `policy.chooseUpgrade` compat shim for `kind==='upgrade'`, else `defaultChoiceId`. Synchronous, zero allocation beyond the result.
+- **`live`** (browser) — `request` defers to injected presenter; queue + deadline owned by manager; timeout falls through to policy-mode resolution. No presenter → falls straight to policy.
+- **`scripted`** (replay) — `requestSync` matches each request against the recorded `decisionHistory` by `requestId` + `optionIds`. On drift, logs once per (kind, reason) and falls through to policy.
+
+**Lazy options (`optionsFn`):** Choices are rolled at *resolution* time, not at request creation. This fixes a latent same-tick-double-level-up bug where the second pick's choices would otherwise reflect stats *before* the first pick was applied.
+
+**Request ids** are `${kind}:${seed}:${tick}:${counter}` — deterministic per seed+tick, counter increments within a tick. Replay drift detection uses the id plus the offered optionIds.
+
+**Presenters** are thin DOM adapters with contract `{ present(req, options, resolve), cancel() }`. `src/ui/upgrade-picker.js` and `src/ui/archetype-picker.js` are the two live-mode presenters. `main.js` wires both through a small composite presenter that dispatches by `request.kind`.
+
+**Archetype content** (`src/content/archetypes.js`) — 4 starting archetypes (balanced, warrior, ranger, mystic) that set starting weapon and stat modifiers. Applied by `skills.applyArchetype(id)` before the tick loop. Recorded as the first entry of every run's `decisionHistory`.
+
+**Integration points:**
+- `src/ai/game-runner.js` — constructs manager in `policy` mode (or `scripted` when `decisionScript` is supplied); calls `requestSync` pre-loop for archetype and inside the level-up check.
+- `src/main.js` — constructs manager in `live` mode; gates the simulation loop on `decisions.blocking`; calls `decisions.tick(dt)` each frame; `decisions.cancelAll()` on return-to-menu.
+- `src/lab/run-recorder.js` — records `decisionHistory` into the artifact alongside the legacy `upgradeChoices`.
+- `src/lab/replay.js` — `replayWithForcedUpgrades` uses scripted mode; legacy artifacts without `decisionHistory` are synthesized from `upgradeChoices`.
+- `AppState.ARCHETYPE_SELECT` — new app-state value; main loop skips simulation while active (archetype decision is blocking).
+
+| Layer | Reads | Writes | Never touches |
+|-------|-------|--------|---------------|
+| Decisions | Policy interface, injected presenter, decision script | Decision history entries | Engine memory, renderer, DOM (presenters only) |
 
 ## Simulation Lab (`src/lab/`)
 
@@ -299,6 +334,9 @@ Structured experiment and evolutionary training platform built on the Simulation
 - New experiment UI panel: add tab in `debug/experiment-lab.html`
 - New lab page panel: create module in `lab/src/panels/` with `{ id, label, create(container), destroy() }`, register in `lab/src/lab-app.js`
 - New archetype progression: create config object based on `PLAYER_PROGRESSION`, call `registerProgressionConfig(archetypeId, config)` in `progression.js`. Preview in studio.
+- New player archetype: add entry to `ARCHETYPES` in `src/content/archetypes.js` (id, name, desc, optional `weapon`, optional `stats: {maxHpBonus, speedBonus, armor, regenRate, pickupRadius}`). `skills.applyArchetype` and the archetype-picker pick it up automatically.
+- New decision kind: add a constant to `DecisionKind` in `src/decisions/types.js`; have gameplay call `decisions.request(...)` / `.requestSync(...)` with the new `kind`; teach policies via optional `policy.decide(req, obs)`; in live mode extend the composite presenter in `main.js` to dispatch to a new presenter. Record automatically flows through `decisionHistory`.
+- New decision presenter: module exporting `createXxxPicker(container)` that returns `{ present(request, options, resolve), cancel() }`. Wire into `main.js` composite presenter. Do NOT touch engine or renderer.
 - See `docs/extending.md` for detailed instructions
 
 ## Test Coverage

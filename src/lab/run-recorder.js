@@ -180,6 +180,7 @@ export function createRunRecorder(options) {
         snapshotInterval,
 
         upgradeChoices,
+        decisionHistory: result.decisionHistory || [],
         events,
         snapshots,
 

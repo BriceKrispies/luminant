@@ -6,6 +6,7 @@
 
 export const AppState = {
   MENU: 'menu',
+  ARCHETYPE_SELECT: 'archetype_select',
   PLAYING: 'playing',
   PAUSED: 'paused',
   GAME_OVER: 'game_over',

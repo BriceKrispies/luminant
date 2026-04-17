@@ -20,6 +20,9 @@ import { createEliteSystem } from '../systems/elite-system.js';
 import { createEnemyActionsSystem } from '../systems/enemy-actions.js';
 import { createObservationBuilder } from './observations.js';
 import { computeScore } from './scoring.js';
+import { createDecisionManager } from '../decisions/manager.js';
+import { DecisionKind, DecisionMode } from '../decisions/types.js';
+import { ARCHETYPES, DEFAULT_ARCHETYPE_ID } from '../content/archetypes.js';
 
 const WORLD_W = 4096;
 const WORLD_H = 4096;
@@ -58,6 +61,12 @@ function createRNG(seed) {
  * @param {boolean} [options.recordSnapshots] — record periodic snapshots
  * @param {number} [options.snapshotInterval] — ticks between snapshots (default: 300 = 5s)
  * @param {boolean} [options.silent] — suppress console output
+ * @param {Array} [options.decisionScript] — prior run's decisionHistory to replay.
+ *   When provided, the decision manager runs in 'scripted' mode: each request
+ *   is matched to a recorded entry by requestId + optionIds; on drift it logs
+ *   and falls through to the policy.
+ * @param {function} [options.onDecisionDrift] — callback (req, recorded, reason)
+ *   invoked once per drift class during scripted replay.
  * @returns {Object} — structured run result
  */
 export async function runGame(options) {
@@ -69,6 +78,8 @@ export async function runGame(options) {
     recordSnapshots = false,
     snapshotInterval = 300,
     silent = true,
+    decisionScript = null,
+    onDecisionDrift = null,
   } = options;
 
   // Seed Math.random replacement
@@ -107,8 +118,35 @@ export async function runGame(options) {
     let totalDamageTaken = 0;
     let prevHP = player.getMaxHP();
     let adrenalineActive = false;
-    const upgradeHistory = [];
+    const decisionHistory = [];
     const snapshots = [];
+
+    // Decision manager — observation is passed via a getter so policies
+    // receive the freshest obs at resolution time. Switches to 'scripted'
+    // mode when a prior run's decisionHistory is supplied for replay.
+    let latestObs = null;
+    const decisions = createDecisionManager({
+      mode: decisionScript ? DecisionMode.SCRIPTED : DecisionMode.POLICY,
+      policy,
+      seed,
+      history: decisionHistory,
+      script: decisionScript || [],
+      onDrift: onDecisionDrift,
+      onObservation: () => latestObs,
+    });
+
+    // ── Run-start archetype decision (pre-tick) ──
+    // Resolved synchronously; applied before any systems tick so starting
+    // stats and weapon reflect the choice in trajectory[0].
+    const archetypeResult = decisions.requestSync({
+      kind: DecisionKind.ARCHETYPE,
+      tick: -1,
+      optionsFn: () => ARCHETYPES.map(a => ({ id: a.id, label: a.name, meta: { desc: a.desc } })),
+      context: { phase: 'run-start' },
+      defaultChoiceId: DEFAULT_ARCHETYPE_ID,
+      blocking: true,
+    });
+    skills.applyArchetype(archetypeResult.choiceId);
 
     for (let tick = 0; tick < maxTicks; tick++) {
       if (!alive) break;
@@ -135,6 +173,7 @@ export async function runGame(options) {
         worldW: WORLD_W,
         worldH: WORLD_H,
       });
+      latestObs = obs;
 
       // Policy decision
       const action = policy.act(obs);
@@ -205,21 +244,21 @@ export async function runGame(options) {
       elites.update(DT, pp.x, pp.y, director.gameTime);
       enemyActions.update(DT);
 
-      // Level-up
-      if (xpSystem.pendingLevelUps > 0) {
-        const choices = skills.getUpgradeChoices(3);
-        if (choices.length > 0) {
-          xpSystem.consumeLevelUp();
-          const chosenId = policy.chooseUpgrade(choices, obs);
-          const finalChoice = chosenId || choices[0].id;
-          skills.applyUpgrade(finalChoice);
-          upgradeHistory.push({
-            tick,
-            level: xpSystem.level,
-            chosen: finalChoice,
-            options: choices.map(c => c.id),
-          });
-        }
+      // Level-up — route through the decision manager. Supports multiple
+      // same-tick level-ups; options are rolled lazily per-decision so each
+      // roll reflects the stats produced by earlier picks in this tick.
+      while (xpSystem.pendingLevelUps > 0) {
+        xpSystem.consumeLevelUp();
+        const levelForPick = xpSystem.level;
+        const result = decisions.requestSync({
+          kind: DecisionKind.UPGRADE,
+          tick,
+          optionsFn: () => skills.getUpgradeChoices(3),
+          context: { level: levelForPick },
+          defaultChoiceId: null, // resolver picks first option
+        });
+        if (!result || !result.choiceId) break;
+        skills.applyUpgrade(result.choiceId);
       }
 
       // Track damage
@@ -256,6 +295,7 @@ export async function runGame(options) {
       }
     }
 
+    const upgradeHistory = deriveUpgradeHistory(decisionHistory);
     const result = {
       seed,
       policyId: policy.id,
@@ -270,6 +310,7 @@ export async function runGame(options) {
       survived: alive,
       upgradePath: upgradeHistory.map(h => h.chosen),
       upgradeHistory,
+      decisionHistory,
       weaponPath: skills.acquired.filter(id =>
         ['sword_mastery', 'shotgun_unlock', 'nova_unlock'].includes(id)
       ),
@@ -283,6 +324,26 @@ export async function runGame(options) {
   } finally {
     Math.random = origRandom;
   }
+}
+
+/**
+ * Derive legacy `upgradeHistory` entries from a decisionHistory array.
+ * Kept so existing analytics, replay, and experiment-lab readers keep working.
+ */
+function deriveUpgradeHistory(decisionHistory) {
+  const out = [];
+  let level = 1;  // level after the Nth upgrade pick is N+1 (start at level 1, pick → level 2)
+  for (const d of decisionHistory) {
+    if (d.kind !== 'upgrade') continue;
+    level++;
+    out.push({
+      tick: d.tick,
+      level,
+      chosen: d.choiceId,
+      options: d.optionIds,
+    });
+  }
+  return out;
 }
 
 /**
@@ -330,7 +391,27 @@ export async function runGameWithBehavior(options) {
     let totalDamageTaken = 0;
     let prevHP = player.getMaxHP();
     let adrenalineActive = false;
-    const upgradeHistory = [];
+    const decisionHistory = [];
+
+    let latestObs = null;
+    const decisions = createDecisionManager({
+      mode: DecisionMode.POLICY,
+      policy,
+      seed,
+      history: decisionHistory,
+      onObservation: () => latestObs,
+    });
+
+    // Run-start archetype decision (pre-tick), mirrors runGame().
+    const archetypeResult = decisions.requestSync({
+      kind: DecisionKind.ARCHETYPE,
+      tick: -1,
+      optionsFn: () => ARCHETYPES.map(a => ({ id: a.id, label: a.name, meta: { desc: a.desc } })),
+      context: { phase: 'run-start' },
+      defaultChoiceId: DEFAULT_ARCHETYPE_ID,
+      blocking: true,
+    });
+    skills.applyArchetype(archetypeResult.choiceId);
 
     // Behavior tracking
     let prevDx = 0, prevDy = 0;
@@ -373,6 +454,7 @@ export async function runGameWithBehavior(options) {
         worldW: WORLD_W,
         worldH: WORLD_H,
       });
+      latestObs = obs;
 
       const action = policy.act(obs);
       const dx = action.dx || 0;
@@ -467,15 +549,17 @@ export async function runGameWithBehavior(options) {
       elites.update(DT, pp.x, pp.y, director.gameTime);
       enemyActions.update(DT);
 
-      if (xpSystem.pendingLevelUps > 0) {
-        const choices = skills.getUpgradeChoices(3);
-        if (choices.length > 0) {
-          xpSystem.consumeLevelUp();
-          const chosenId = policy.chooseUpgrade(choices, obs);
-          const finalChoice = chosenId || choices[0].id;
-          skills.applyUpgrade(finalChoice);
-          upgradeHistory.push({ tick, level: xpSystem.level, chosen: finalChoice, options: choices.map(c => c.id) });
-        }
+      while (xpSystem.pendingLevelUps > 0) {
+        xpSystem.consumeLevelUp();
+        const result = decisions.requestSync({
+          kind: DecisionKind.UPGRADE,
+          tick,
+          optionsFn: () => skills.getUpgradeChoices(3),
+          context: { level: xpSystem.level },
+          defaultChoiceId: null,
+        });
+        if (!result || !result.choiceId) break;
+        skills.applyUpgrade(result.choiceId);
       }
 
       const currentHP = player.getHP();
@@ -502,8 +586,9 @@ export async function runGameWithBehavior(options) {
       wave: director.waveIndex,
       damageTaken: totalDamageTaken,
       survived: alive,
-      upgradePath: upgradeHistory.map(h => h.chosen),
-      upgradeHistory,
+      upgradePath: deriveUpgradeHistory(decisionHistory).map(h => h.chosen),
+      upgradeHistory: deriveUpgradeHistory(decisionHistory),
+      decisionHistory,
       weaponPath: skills.acquired.filter(id =>
         ['sword_mastery', 'shotgun_unlock', 'nova_unlock'].includes(id)
       ),

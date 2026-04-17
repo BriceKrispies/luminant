@@ -467,5 +467,61 @@ The seeded PRNG replaces `Math.random` during simulation.
   replay, results will diverge
 - Floating-point micro-divergence is possible on very long runs across
   different platforms
-- Forced-upgrade replay (`replayWithForcedUpgrades`) provides tighter
-  reproduction by overriding `chooseUpgrade` with the stored sequence
+- Forced-upgrade replay (`replayWithForcedUpgrades`) now uses the decision
+  manager's `scripted` mode — every decision (archetype + upgrade) is
+  replayed from `decisionHistory` with drift detection and policy fallback
+
+## Decision System
+
+`src/decisions/` is the headless-first decision layer. Gameplay systems call
+`decisions.request(...)` or `decisions.requestSync(...)` and receive a resolved
+choice without knowing whether the resolver is live UI, a policy, or a replay
+script.
+
+### Adding a New Decision Kind
+
+1. **Pick a kind string** and add a constant to `DecisionKind` in
+   `src/decisions/types.js`.
+2. **Wire the request at the call site** (gameplay system or `game-runner.js` /
+   `main.js`):
+   ```js
+   decisions.request({
+     kind: DecisionKind.MY_KIND,
+     tick: currentTick,
+     optionsFn: () => [ { id, label, meta } ],
+     context: { /* anything the resolver needs */ },
+     defaultChoiceId: 'something-always-valid',
+     blocking: false,          // true halts sim in live mode
+     deadlineMs: 5000,         // live-only auto-pick timeout
+   }, (result) => applyChoice(result.choiceId));
+   ```
+   Use `requestSync` in headless paths where the result is needed immediately.
+3. **Teach the policy** (optional). Add a `decide(req, obs)` method to policies
+   that should score the new kind. Missing `decide` falls back to the compat
+   shim for `kind==='upgrade'`, else to `defaultChoiceId`.
+4. **Live-mode presenter** (optional). Add a `src/ui/xxx-picker.js` that
+   exports `createXxxPicker(container)` returning
+   `{ present(request, options, resolve), cancel() }`. Wire it into the
+   composite presenter in `main.js` by dispatching on `request.kind`.
+5. **Content file** (optional). If the decision selects from a catalog, add a
+   new file under `src/content/` (see `archetypes.js` for the pattern).
+
+### Adding a New Player Archetype
+
+Add an entry to `ARCHETYPES` in `src/content/archetypes.js`:
+```js
+{ id: 'berserker', name: 'Berserker',
+  desc: 'Low HP, high damage multiplier.',
+  weapon: 'sword',
+  stats: { maxHpBonus: -20, speedBonus: 40 } }
+```
+`skills.applyArchetype` and the archetype-picker pick it up automatically.
+Stats are `{ maxHpBonus, speedBonus, armor, regenRate, pickupRadius }`.
+
+### Decision Invariants
+
+- `src/decisions/**` must not import from `src/engine/`, `src/renderer/`, or
+  `src/ui/`. Presenters are injected; the manager never sees the DOM.
+- `requestSync` is synchronous and zero-wait — harnesses must never block.
+- `optionsFn` must be pure and idempotent within a single resolution.
+- `defaultChoiceId` must always be a valid option id (or `null` to mean "first").
