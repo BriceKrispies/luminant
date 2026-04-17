@@ -20,8 +20,8 @@ import { createEliteSystem } from '../systems/elite-system.js';
 import { createObservationBuilder } from './observations.js';
 import { computeScore } from './scoring.js';
 
-const WORLD_W = 4096;
-const WORLD_H = 4096;
+const WORLD_W = 540;
+const WORLD_H = 540;
 const DT = 1 / 60;
 
 /**
