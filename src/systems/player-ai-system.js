@@ -4,6 +4,7 @@ import { createPolicy, listPolicies } from '../ai/policy-types.js';
 // Register policies
 import './player-ai/policies/brawler.js';
 import './player-ai/policies/strategist.js';
+import './player-ai/policies/exterminator.js';
 import '../ai/neural/neural-policy.js';
 
 export function createPlayerAISystem(engine) {

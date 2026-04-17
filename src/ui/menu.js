@@ -9,6 +9,7 @@ import { AppState } from './state.js';
 // Ensure utility policies are registered
 import '../systems/player-ai/policies/brawler.js';
 import '../systems/player-ai/policies/strategist.js';
+import '../systems/player-ai/policies/exterminator.js';
 
 export function createMenuUI(container, appState) {
   let onStart = null;
