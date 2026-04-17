@@ -142,6 +142,7 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 8. Deaths: WAT sets state=2, JS processes dying entities (XP, pickups)
 9. A canvas element can only have one context type — renderer manager replaces it on switch
 10. Elite system exposes `_activeEliteIds()` for AI boss-tracking context
+11. Camera is a static arena-fit view (centered on world, zoomed to fit world bounds) — it does not follow the player. `fitWorld()` runs at init and on resize; `update()` drives only shake/impulse.
 
 ## AI / Policy System
 

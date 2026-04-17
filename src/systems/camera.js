@@ -1,6 +1,6 @@
 /**
  * Camera / viewport system.
- * Follows the player with smooth interpolation.
+ * Static arena view: centered on the world, zoomed to fit the full arena.
  */
 
 import { smoothApproach, clamp } from '../utils/math.js';
@@ -18,6 +18,19 @@ export function createCameraSystem(canvasW, canvasH, worldW, worldH) {
   let impulseY = 0;
   let impulseDecay = 12;
 
+  // Fit the entire world into the viewport, centered. `padding` > 1 leaves margin.
+  function fitWorld(padding = 1) {
+    x = worldW / 2;
+    y = worldH / 2;
+    targetX = x;
+    targetY = y;
+    const zx = canvasW / worldW;
+    const zy = canvasH / worldH;
+    zoom = Math.min(zx, zy) / padding;
+  }
+
+  fitWorld();
+
   return {
     get x() { return x; },
     get y() { return y; },
@@ -28,6 +41,8 @@ export function createCameraSystem(canvasW, canvasH, worldW, worldH) {
       targetX = tx;
       targetY = ty;
     },
+
+    fitWorld,
 
     addShake(intensity) {
       shake = Math.min(shake + intensity, 20);
@@ -94,6 +109,7 @@ export function createCameraSystem(canvasW, canvasH, worldW, worldH) {
     resize(w, h) {
       canvasW = w;
       canvasH = h;
+      fitWorld();
     },
   };
 }
