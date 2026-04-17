@@ -222,7 +222,7 @@ async function main() {
     clock.start();
 
     autoPlayer.enabled = true;
-    autoPlayer.setPolicy('strategist');
+    autoPlayer.setPolicy('exterminator');
     autoPlayer.reset();
     input.setOverride(null);
     upgradePicker.reset();
