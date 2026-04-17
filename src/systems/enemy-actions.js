@@ -62,7 +62,7 @@ export function createEnemyActionsSystem(engine, spawner, player) {
         const bulletR = buf.getFloat32(base + FIELD.RADIUS, true);
         if (d < pr + bulletR) {
           const dmg = buf.getFloat32(base + FIELD.DAMAGE, true);
-          player.takeDamage(dmg);
+          engine.applyDamage(pid, dmg);
           engine.despawnEntity(id);
         }
       }

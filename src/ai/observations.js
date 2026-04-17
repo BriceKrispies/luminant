@@ -7,7 +7,7 @@
  * and contain all the signals a policy needs for decision-making.
  */
 
-import { STATE } from '../engine/bindings.js';
+import { STATE, BEHAVIOR, FIELD } from '../engine/bindings.js';
 import { WEAPON_DEFS } from '../content/weapon-types.js';
 
 /** Number of directional sectors for density/threat analysis */
@@ -108,6 +108,12 @@ export function createObservationBuilder(engine) {
 
       let totalEnemies = 0;
 
+      // Behavior-aware high-value targets (strategist policy uses these).
+      let nearestSummoner = null;
+      let nearestShooter = null;
+      let incomingDasher = null; // charger in dash sub-phase aimed at us
+      const countByBehavior = new Array(10).fill(0);
+
       // Query all entities in FAR_RADIUS
       const nearby = engine.gridQuery(playerX, playerY, FAR_RADIUS);
 
@@ -138,7 +144,32 @@ export function createObservationBuilder(engine) {
           const threat = engine.getEntityHP(id) * engine.getEntityDamage(id);
           sectorThreat[sectorIdx] += threat;
 
-          if (dist < nearestEnemyDist) {
+          // Behavior-aware bookkeeping
+          const flags = engine.getI32(id, FIELD.FLAGS);
+          const behId = flags & 0x0F;
+          const subPhase = (flags >> 4) & 0x0F;
+          if (behId >= 0 && behId < 10) countByBehavior[behId]++;
+
+          if (behId === BEHAVIOR.SUMMONER) {
+            if (!nearestSummoner || dist < nearestSummoner.dist) {
+              nearestSummoner = { id, x: ex, y: ey, dist, angle: ang };
+            }
+          } else if (behId === BEHAVIOR.SHOOTER) {
+            if (!nearestShooter || dist < nearestShooter.dist) {
+              nearestShooter = { id, x: ex, y: ey, dist, angle: ang };
+            }
+          } else if (behId === BEHAVIOR.CHARGER && subPhase === 2) {
+            // Dash sub-phase: threat is a straight-line strike aimed at player.
+            // Pick the closest one — only need to dodge one at a time.
+            if (!incomingDasher || dist < incomingDasher.dist) {
+              incomingDasher = { id, x: ex, y: ey, dist, angle: ang };
+            }
+          }
+          // Hidden ambushers (beh=7 sub=0) don't deal contact damage — skip
+          // them for nearestEnemy selection to avoid wasting aim cycles.
+          const isHiddenAmbusher = behId === BEHAVIOR.AMBUSHER && subPhase === 0;
+
+          if (!isHiddenAmbusher && dist < nearestEnemyDist) {
             nearestEnemyDist = dist;
             nearestEnemyAngle = ang;
             nearestEnemyX = ex;
@@ -249,6 +280,11 @@ export function createObservationBuilder(engine) {
         safestDirY,
         acquiredUpgrades: acquiredUpgrades || [],
         activeEffects: activeEffects || [],
+        // Behavior-aware signals (used by strategist policy).
+        nearestSummoner,
+        nearestShooter,
+        incomingDasher,
+        countByBehavior,
       };
     },
 

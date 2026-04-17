@@ -222,7 +222,7 @@ async function main() {
     clock.start();
 
     autoPlayer.enabled = true;
-    autoPlayer.setPolicy('neural');
+    autoPlayer.setPolicy('strategist');
     autoPlayer.reset();
     input.setOverride(null);
     upgradePicker.reset();

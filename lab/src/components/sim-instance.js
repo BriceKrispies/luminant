@@ -24,6 +24,7 @@ import { createCameraSystem } from '../../../src/systems/camera.js';
 
 // Register policies so createPolicy can find them
 import '../../../src/systems/player-ai/policies/brawler.js';
+import '../../../src/systems/player-ai/policies/strategist.js';
 import '../../../src/ai/neural/neural-policy.js';
 import { createPolicy, listPolicies } from '../../../src/ai/policy-types.js';
 

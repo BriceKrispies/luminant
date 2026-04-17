@@ -149,7 +149,7 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 ## AI / Policy System
 
 - **Auto-mode only** — AI neural policy controls the player, no manual play or policy selection in UI
-- **Default policy: neural** — neuroevolution-trained feedforward network, set in `main.js` via `setPolicy('neural')`
+- **Default policy: strategist** — utility policy with behavior-aware overrides (summoner/shooter priority re-aim when in range, charger dash evasion), set in `main.js` via `setPolicy('strategist')`. Outperforms brawler/neural at 30k-tick bench against the 10-behavior mix. See `src/systems/player-ai/policies/strategist.js`. Consumes `obs.nearestSummoner`, `obs.nearestShooter`, `obs.incomingDasher`, `obs.countByBehavior` exposed by `src/ai/observations.js`
 - **Policy** produces actions (dx, dy, attack, target) from observations each tick
 - **Observations** built from engine state: spatial sectors, threat density, safest escape vector (`safestDirX/Y`), weapon readiness (`weaponReady`, `weaponRange`, `enemiesInArc`)
 - **Intelligent attacks** — policy only swings when enemies are in range and weapon is ready, not always-attack
