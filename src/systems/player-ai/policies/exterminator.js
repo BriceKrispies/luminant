@@ -1,19 +1,33 @@
 /**
- * Exterminator policy — high-throughput AOE-chain build aimed at maximizing
- * total kills over a long sim run.
+ * Exterminator policy — high-throughput build aimed at maximizing total
+ * kills over a long sim run.
+ *
+ * Iteration history:
+ *  v1: Forced nova_unlock at L1 + aggressive cluster collapse → 388 kills,
+ *      96s survival (worse than strategist's 1216 / 251s baseline). Nova at
+ *      L1 has 12dmg×12-burst on 1.2s cd radial; vs single early-game enemy
+ *      only 1-2 projectiles hit ≈ 20 DPS. Sword is 70 DPS at L1.
+ *  v2: Reordered priority list, softened weights → marginal gain (436/119s).
+ *      Vampiric/hp_1/regen never appeared at L2 because tier-locked: L1=
+ *      weapon, L2=signature, L3+=power.
+ *  v3 (current): Use sword_mastery at L1 (the proven melee DPS path), keep
+ *      kill_shockwave + explosive_fifth chain, then sustain (vampiric,
+ *      regen, hp) and damage stacks. Brawler-like weights. Goal: beat
+ *      strategist's ~1216 avg by being slightly more aggressive about
+ *      cluster engagement and explicitly forcing the chain-combo path.
  *
  * Strategy:
- *  1. Force the AOE chain combo via a build-priority chooseUpgrade override:
- *       nova_unlock → kill_shockwave → explosive_fifth → vampiric → hp →
- *       regen → magnet → damage stacks. The default scorer is a fallback
- *       only when none of the priority upgrades are offered.
- *  2. Push intention weights toward dense-cluster engagement so the planner
- *      wades into mass instead of kiting.
- *  3. Keep strategist's loss-prevention overrides (summoner/shooter re-aim,
- *      charger dash perpendicular evasion) — these prevent death/snowball
- *      and gate access to overtime where the bulk of kills materialize.
- *  4. Pre-nova fallback: while the player still holds a sword, bias aim into
- *      the densest sector centroid so the cone hits more bodies per swing.
+ *  1. Build-priority chooseUpgrade override: sword_mastery → kill_shockwave →
+ *      damage_1 → regen_1 → vampiric → hp_1 → explosive_fifth → magnet → ...
+ *      Falls back to default scorer when no priority id is offered.
+ *  2. Intention weights nudged toward cluster engagement (vs brawler) but not
+ *      suicidal — collapse_on_cluster slightly above brawler, danger weight
+ *      slightly below.
+ *  3. Strategist loss-prevention overrides preserved: summoner/shooter
+ *      re-aim, charger dash evasion. These gate survival to high-density
+ *      mid/late phases where the bulk of kills happen.
+ *  4. Cluster-centroid aim for sword: bias aim into densest sector when
+ *      multiple sectors are clustered, so the 70°-cone hits more enemies.
  */
 
 import { registerPolicy } from '../../../ai/policy-types.js';
@@ -22,58 +36,69 @@ import { createUpgradeStrategy } from '../upgrade-strategy.js';
 import { BRAWLER_WEIGHTS } from './brawler.js';
 
 const EXTERMINATOR_WEIGHTS = mergeWeights(BRAWLER_WEIGHTS, {
-  flee: 0.25,
-  kite: 0.2,
-  hold_range: 0.4,
-  reposition_for_shot: 1.0,
-  collapse_on_cluster: 3.5,
+  flee: 0.35,
+  kite: 0.3,
+  hold_range: 0.5,
+  reposition_for_shot: 0.9,
+  collapse_on_cluster: 2.5,
   collect_xp: 0.6,
   boss_focus: 1.5,
-  maintain_pressure: 3.0,
-  hold_ground: 0.7,
+  maintain_pressure: 2.8,
+  hold_ground: 0.9,
 
-  dangerWeight: 0.3,
-  rewardWeight: 2.0,
+  dangerWeight: 0.4,
+  rewardWeight: 1.7,
 
-  survivalBias: 0.2,
-  greedBias: 0.7,
-  preferredSpacing: 0.5,
-  pickupGreed: 0.5,
-  clusterPreference: 1.0,
+  survivalBias: 0.4,         // > 0.6 unlocks sword pick bonus, but we also force it
+  greedBias: 0.55,
+  preferredSpacing: 0.65,
+  pickupGreed: 0.4,
+  clusterPreference: 0.9,
   bossFocus: 0.7,
-  commitmentTime: 10,
-  smoothingRate: 0.40,
-  intentionHysteresis: 0.10,
-  retreatThreshold: 0.15,
-  damageRiskTolerance: 0.85,
-  attackEagerness: 2.0,
+  commitmentTime: 13,
+  smoothingRate: 0.28,
+  intentionHysteresis: 0.18,
+  retreatThreshold: 0.2,
+  damageRiskTolerance: 0.75,
+  attackEagerness: 1.6,
 
   upgradeWeights: {
-    survivability: 1.8,
-    damage: 2.2,
-    aoe: 2.8,
-    speed: 0.4,
-    utility: 1.2,
+    survivability: 2.0,
+    damage: 2.4,
+    aoe: 2.0,
+    speed: 0.5,
+    utility: 1.0,
     scaling: 2.0,
   },
 });
 
 // Build priority — first match in choices wins, gated on per-id stack count.
+// Tier locks (see src/systems/skills.js): L1 = weapon, L2 = signature,
+// L3+ = power pool. Order reflects what's reachable when:
+//   L1 → sword_mastery (proven 70 DPS melee, scales with damage stacks)
+//   L2 → kill_shockwave (chain explosions multiply sword swings)
+//   L3+ → damage_1 stacked first for raw DPS, then sustain (regen, vampiric,
+//         hp), then explosive_fifth/magnet/thorns power picks.
 const BUILD_PRIORITY = [
-  'nova_unlock',
+  'sword_mastery',
   'kill_shockwave',
-  'explosive_fifth',
-  'vampiric',     // 1st stack
-  'hp_1',         // 1st stack
-  'regen_1',      // 1st stack
-  'magnet_1',     // 1st stack
-  'damage_1',     // any stack
-  'vampiric',     // 2nd stack (duplicate intentional)
-  'pierce',
-  'armor_thorns',
-  'hp_1',         // later stacks
-  'regen_1',      // later stacks
-  'magnet_1',     // later stacks
+  'damage_1',         // 1st stack — +20% dmg, +stun
+  'regen_1',          // 1st stack — passive sustain
+  'damage_1',         // 2nd stack
+  'vampiric',         // 1st stack — kill-fed heal
+  'hp_1',             // 1st stack — HP ceiling
+  'damage_1',         // 3rd stack
+  'explosive_fifth',  // chain multiplier on top of sword's high hit rate
+  'magnet_1',         // 1st stack — pickup radius
+  'armor_thorns',     // 1st stack — passive contact DPS + 2 armor
+  'vampiric',         // 2nd stack
+  'regen_1',          // 2nd stack
+  'hp_1',             // 2nd stack
+  'armor_thorns',     // 2nd stack
+  'magnet_1',         // 2nd stack
+  'hp_1',             // 3rd stack
+  'magnet_1',         // 3rd stack
+  'hp_1',             // 4th stack
 ];
 
 const DASH_EVADE_RADIUS = 120;
