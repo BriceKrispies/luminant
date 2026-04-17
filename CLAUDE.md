@@ -156,7 +156,8 @@ DOM-based HUD (`src/ui/hud.js`) — replaces the old in-canvas `ui-render.js`. R
 - **Upgrade strategy** is separate from movement policy
 - **Scoring** is centralized in `src/ai/scoring.js`
 - **Evolution** tunes policy parameters via `src/ai/evolution.js`
-- Other policies (survival, progression, coward, kiter, farmer) still exist for batch sim/evolve harnesses but are not used in-game
+- Other policies (survival, progression, coward, kiter, farmer, obliterator) still exist for batch sim/evolve harnesses but are not used in-game
+- **Obliterator** (`src/systems/player-ai/policies/obliterator.js`) — long-run kill-farming policy. Wraps the utility policy with a hand-ordered upgrade priority (survival-first: armor_thorns → regen_1 → hp_1 → vampiric → explosive_fifth → ...) plus movement overrides (priority aim for summoners/shooters, charger dash evasion, center-bias guard when near a world edge, hard panic flee below 22% HP). Tuned to survive past the phase-4 transition (300–420s) where strategist dies. At 50-seed bench (maxTicks=60000): ~2k avg kills, max ~7.3k, a few seeds survive the full run — vs strategist avg ~1.1k, max ~1.5k. Invoke with `npm run sim --policy=obliterator` or `npm run batch --policy=obliterator`
 - Policy input flows through `input.setOverride()` → same `setPlayerInput()` path
 
 | Layer | Reads | Writes | Never touches |

@@ -32,6 +32,7 @@ import '../src/systems/player-ai/policies/kiter.js';
 import '../src/systems/player-ai/policies/brawler.js';
 import '../src/systems/player-ai/policies/strategist.js';
 import '../src/systems/player-ai/policies/farmer.js';
+import '../src/systems/player-ai/policies/obliterator.js';
 import '../src/ai/neural/neural-policy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
