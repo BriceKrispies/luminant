@@ -38,8 +38,8 @@ import { UPGRADE_POOL } from './content/upgrade-pool.js';
 // Utility-based policies are registered via player-ai-system.js imports.
 // Legacy policies (survival, progression) are also imported there.
 
-const WORLD_W = 4096;
-const WORLD_H = 4096;
+const WORLD_W = 540;
+const WORLD_H = 540;
 
 async function main() {
   // ── Register service worker for PWA / offline ──

@@ -26,8 +26,8 @@ import '../../../src/systems/player-ai/policies/brawler.js';
 import '../../../src/ai/neural/neural-policy.js';
 import { createPolicy, listPolicies } from '../../../src/ai/policy-types.js';
 
-const WORLD_W = 4096;
-const WORLD_H = 4096;
+const WORLD_W = 540;
+const WORLD_H = 540;
 const DT = 1 / 60;
 
 const nullFeedback = { emit() {}, update() {}, reset() {} };
