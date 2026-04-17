@@ -3,31 +3,36 @@
  * kills over a long sim run.
  *
  * Iteration history:
- *  v1: Forced nova_unlock at L1 + aggressive cluster collapse → 388 kills,
- *      96s survival (worse than strategist's 1216 / 251s baseline). Nova at
- *      L1 has 12dmg×12-burst on 1.2s cd radial; vs single early-game enemy
- *      only 1-2 projectiles hit ≈ 20 DPS. Sword is 70 DPS at L1.
- *  v2: Reordered priority list, softened weights → marginal gain (436/119s).
- *      Vampiric/hp_1/regen never appeared at L2 because tier-locked: L1=
- *      weapon, L2=signature, L3+=power.
- *  v3 (current): Use sword_mastery at L1 (the proven melee DPS path), keep
- *      kill_shockwave + explosive_fifth chain, then sustain (vampiric,
- *      regen, hp) and damage stacks. Brawler-like weights. Goal: beat
- *      strategist's ~1216 avg by being slightly more aggressive about
- *      cluster engagement and explicitly forcing the chain-combo path.
+ *  v1: Forced nova_unlock at L1 → 388 kills, 96s survival. Nova at L1 is
+ *      ~20 DPS vs sword's 70.
+ *  v2: Reordered priority list → marginal gain. Tier locks meant late-game
+ *      power picks couldn't be hoisted to L2 anyway.
+ *  v3: Sword + kill_shockwave + chain combo → 1167 avg kills, ~strategist
+ *      parity.
+ *  v4a (rejected): Tried berserker over kill_shockwave (mimicking trained
+ *      neural's best run). Result: berserker runs scored 545 avg vs
+ *      kill_shockwave runs 1395 avg. Berserker only fires +80% rate at
+ *      HP < 50% — neural learned to "live dangerously" in that band; my
+ *      planner retreats earlier (retreatThreshold=0.2) so the trigger
+ *      rarely fires. Berserker is movement-style-dependent and not
+ *      additive for hand-coded policies.
+ *  v4 (current): Keep v3's kill_shockwave path. Add heal_now spam
+ *      fallback (maxStacks=99) for late-game sustain — strict additive
+ *      improvement, observed in trained neural's best runs.
+ *
+ * Note: a freshly trained neural (npm run train --maxTicks=60000) hit
+ * 5398 avg / 15,825 max kills. Hand-coded policies cap at ~1200 avg
+ * because the late-game requires sub-tick movement decisions (when to
+ * stand still for thorns, when to pivot through enemy gaps) that an MLP
+ * learns but explicit weights can't easily express.
  *
  * Strategy:
- *  1. Build-priority chooseUpgrade override: sword_mastery → kill_shockwave →
- *      damage_1 → regen_1 → vampiric → hp_1 → explosive_fifth → magnet → ...
- *      Falls back to default scorer when no priority id is offered.
- *  2. Intention weights nudged toward cluster engagement (vs brawler) but not
- *      suicidal — collapse_on_cluster slightly above brawler, danger weight
- *      slightly below.
- *  3. Strategist loss-prevention overrides preserved: summoner/shooter
- *      re-aim, charger dash evasion. These gate survival to high-density
- *      mid/late phases where the bulk of kills happen.
- *  4. Cluster-centroid aim for sword: bias aim into densest sector when
- *      multiple sectors are clustered, so the 70°-cone hits more enemies.
+ *  1. Build-priority chooseUpgrade: sword_mastery → kill_shockwave →
+ *      damage_1 stacks → sustain (regen, vampiric, hp) → explosive_fifth →
+ *      magnet/thorns → heal_now spam (additive late-game heal).
+ *  2. Brawler-like intention weights with mild cluster bias.
+ *  3. Strategist's summoner/shooter re-aim + charger dash evasion preserved.
+ *  4. Cluster-centroid aim for sword melee.
  */
 
 import { registerPolicy } from '../../../ai/policy-types.js';
@@ -74,11 +79,13 @@ const EXTERMINATOR_WEIGHTS = mergeWeights(BRAWLER_WEIGHTS, {
 
 // Build priority — first match in choices wins, gated on per-id stack count.
 // Tier locks (see src/systems/skills.js): L1 = weapon, L2 = signature,
-// L3+ = power pool. Order reflects what's reachable when:
-//   L1 → sword_mastery (proven 70 DPS melee, scales with damage stacks)
-//   L2 → kill_shockwave (chain explosions multiply sword swings)
-//   L3+ → damage_1 stacked first for raw DPS, then sustain (regen, vampiric,
-//         hp), then explosive_fifth/magnet/thorns power picks.
+// L3+ = power pool.
+//   L1 → sword_mastery (70 DPS melee + wider cone)
+//   L2 → kill_shockwave (always-on AOE chain on every kill)
+//   L3+ → damage stacks first for raw DPS, then sustain (regen, vampiric,
+//         hp), then explosive_fifth/magnet/thorns. Once power pool drains,
+//         heal_now (maxStacks=99) becomes the only remaining option and
+//         provides indefinite sustain.
 const BUILD_PRIORITY = [
   'sword_mastery',
   'kill_shockwave',
@@ -87,19 +94,25 @@ const BUILD_PRIORITY = [
   'damage_1',         // 2nd stack
   'vampiric',         // 1st stack — kill-fed heal
   'hp_1',             // 1st stack — HP ceiling
-  'damage_1',         // 3rd stack
+  'damage_1',         // 3rd stack — caps at maxStacks=3
   'explosive_fifth',  // chain multiplier on top of sword's high hit rate
   'magnet_1',         // 1st stack — pickup radius
   'armor_thorns',     // 1st stack — passive contact DPS + 2 armor
-  'vampiric',         // 2nd stack
-  'regen_1',          // 2nd stack
+  'vampiric',         // 2nd stack — caps at maxStacks=2
+  'regen_1',          // 2nd stack — caps at maxStacks=2
   'hp_1',             // 2nd stack
-  'armor_thorns',     // 2nd stack
+  'armor_thorns',     // 2nd stack — caps at maxStacks=2
   'magnet_1',         // 2nd stack
   'hp_1',             // 3rd stack
-  'magnet_1',         // 3rd stack
-  'hp_1',             // 4th stack
+  'magnet_1',         // 3rd stack — caps at maxStacks=3
+  'hp_1',             // 4th stack — caps at maxStacks=4
+  // FALLBACK_HEAL_ID (heal_now, maxStacks=99) takes over after this list.
 ];
+
+// Once all priority picks are exhausted, fall back to heal_now (maxStacks=99,
+// always offered, gives 25% max HP heal) — the neural-trained policy spammed
+// this for late-game sustain.
+const FALLBACK_HEAL_ID = 'heal_now';
 
 const DASH_EVADE_RADIUS = 120;
 const PRIORITY_AIM_RADIUS = 380;
@@ -200,8 +213,12 @@ function createExterminatorPolicy(overrides = {}) {
         return id;
       }
 
-      // Fallback: none of the priority ids are present — defer to the base
-      // category-weighted scorer so we still pick something sensible.
+      // Once priority list is exhausted, prefer heal_now (maxStacks=99,
+      // always offered, +25% max HP) for late-game sustain.
+      const heal = choices.find(c => c.id === FALLBACK_HEAL_ID);
+      if (heal) return heal.id;
+
+      // Final fallback: defer to the base category-weighted scorer.
       return fallbackUpgrader.choose(choices, obs);
     },
   };
