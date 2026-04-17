@@ -31,6 +31,7 @@ import '../src/systems/player-ai/policies/coward.js';
 import '../src/systems/player-ai/policies/kiter.js';
 import '../src/systems/player-ai/policies/brawler.js';
 import '../src/systems/player-ai/policies/strategist.js';
+import '../src/systems/player-ai/policies/exterminator.js';
 import '../src/systems/player-ai/policies/farmer.js';
 import '../src/ai/neural/neural-policy.js';
 
