@@ -47,8 +47,8 @@ Snapshot includes `facing` field (radians) for directional creature rendering.
 ## Renderer
 
 Dual-backend system with runtime switching:
-- **WebGPU** (`webgpu-renderer.js`): Instanced entity rendering, WGSL shaders, orthographic projection. Creatures and effects drawn via low-res (270p) Canvas 2D overlay with nearest-neighbor upscaling.
-- **Canvas 2D** (`canvas-renderer.js`): Renders to a fixed 270p low-res offscreen canvas, then blits up to display with nearest-neighbor scaling for a pixel-art look. Layered drawing (ground, lights, entities, effects, fog). Integer camera snapping prevents sub-pixel anti-aliasing.
+- **WebGPU** (`webgpu-renderer.js`): Instanced entity rendering, WGSL shaders, orthographic projection. Creatures and effects drawn via low-res (540p) Canvas 2D overlay with nearest-neighbor upscaling.
+- **Canvas 2D** (`canvas-renderer.js`): Renders to a fixed 540p low-res offscreen canvas, then blits up to display with nearest-neighbor scaling for a pixel-art look. Layered drawing (ground, lights, entities, effects, fog). Integer camera snapping prevents sub-pixel anti-aliasing.
 - **Manager** (`renderer-manager.js`): Detects WebGPU, loads/saves preference to localStorage, handles runtime toggle (F4 / badge click). Replaces the canvas element on context switch since a canvas can only have one context type.
 - **Interface** (`renderer-interface.js`): Contract — `{ id, name, init(), resize(), render(snapshot, camera), dispose() }`.
 - **Creatures** (`creatures/`): Skeleton-based procedural creature rendering subsystem with layered rigging pipeline:
@@ -67,7 +67,7 @@ Dual-backend system with runtime switching:
   - `draw-pixel.js` — World-space pixel drawing: per-archetype pixel functions (player, slime, ghost, brute, ember), 1 world unit = 1 render pixel. Draws progression effects (glow behind body, tendrils/halo/burst above). Used by both backends.
   - `progression.js` — Data-driven visual progression state: derives tier, bounded intensity, modulation phase, unlocked features, and per-feature params from entity level/time/seed. Asymptotic intensity curve (never unbounded). Player config with 9 milestones (1-50). Per-archetype config registry with default fallback.
   - `progression-visuals.js` — Progression effect drawing: radial body glow, animated energy tendrils, halo/crown rings, level-up burst particles. All pixel-art scale. Per-feature toggle support for studio.
-  - Both backends draw creatures via Canvas 2D at 270p low resolution (WebGPU uses a low-res offscreen canvas blitted to its overlay)
+  - Both backends draw creatures via Canvas 2D at 540p low resolution (WebGPU uses a low-res offscreen canvas blitted to its overlay)
 
 ## Skeletal Animation Engine (`src/animation/`)
 

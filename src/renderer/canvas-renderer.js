@@ -17,8 +17,9 @@ import { drawEntities } from './entities.js';
 import { drawEffects } from './effects.js';
 
 // Fixed render height — width computed from display aspect ratio.
-// 270p gives chunky, readable pixels at typical 1080p displays (4x scale).
-const RENDER_HEIGHT = 270;
+// Matches WORLD_H so the static arena-fit camera lands at zoom=1, keeping
+// pixel-art drawing crisp. Display blit uses nearest-neighbor to upscale.
+const RENDER_HEIGHT = 540;
 
 export function createCanvasRenderer(canvas) {
   let displayCtx = null;
