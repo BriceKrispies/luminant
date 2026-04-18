@@ -3,6 +3,11 @@
  * Renders into a DOM element for crispness.
  */
 
+// Injected by Vite at build time (see vite.config.js).
+// Falls back to 'dev' if the define isn't applied (e.g. when loaded via a
+// raw node runner without Vite's transform).
+const COMMIT = typeof __GIT_COMMIT__ !== 'undefined' ? __GIT_COMMIT__ : 'dev';
+
 export function createDebugOverlay(element) {
   let visible = false;
   let data = {};
@@ -20,6 +25,7 @@ export function createDebugOverlay(element) {
       if (!visible) return;
 
       const lines = [
+        `Build: ${COMMIT}`,
         `FPS: ${data.fps || 0}`,
         `Entities: ${data.activeEntities || 0}`,
         `  Enemies: ${data.enemyCount || 0}`,

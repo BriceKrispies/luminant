@@ -2,6 +2,16 @@ import { defineConfig } from 'vite';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { createHash } from 'crypto';
+import { execSync } from 'child_process';
+
+function getGitCommit() {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname })
+      .toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 /** Vite plugin: stamp sw.js with a unique cache version on each build */
 function swVersionPlugin() {
@@ -27,6 +37,9 @@ export default defineConfig({
   publicDir: 'public',
   base: process.env.GITHUB_PAGES ? '/luminant/' : '/',
   plugins: [swVersionPlugin()],
+  define: {
+    __GIT_COMMIT__: JSON.stringify(getGitCommit()),
+  },
   build: {
     outDir: 'dist',
     target: 'esnext',
