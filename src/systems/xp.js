@@ -64,7 +64,7 @@ export function createXPSystem(engine, deps = {}) {
               1, 0, 15, 0, xpValue
             );
             if (pickupId >= 0) {
-              engine.setEntityLifetime(pickupId, 30);
+              engine.setEntityLifetime(pickupId, 10);
             }
           }
 
