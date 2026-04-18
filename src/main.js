@@ -502,8 +502,14 @@ async function main() {
           tick: Math.round(clock.totalTime * 60),
           optionsFn: () => {
             const choices = skills.getUpgradeChoices(3);
+            // Preserve the full upgrade definition (weapon, effect,
+            // damageMultiplier, maxHpBonus, armor, …) so policy.chooseUpgrade
+            // can actually score them. Earlier versions stripped to
+            // {id,label,meta}, which broke the scorer — every choice scored
+            // 0 and the shuffled-first choice always won, i.e. upgrades
+            // were effectively random in the live game.
             return choices.map(c => ({
-              id: c.id,
+              ...c,
               label: c.name,
               meta: { tier: c.tier, desc: c.desc },
             }));
