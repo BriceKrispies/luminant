@@ -39,6 +39,7 @@ import { UPGRADE_POOL } from './content/upgrade-pool.js';
 import { createDecisionManager } from './decisions/manager.js';
 import { DecisionKind, DecisionMode } from './decisions/types.js';
 import { ARCHETYPES, DEFAULT_ARCHETYPE_ID } from './content/archetypes.js';
+import { getLoadedWeightsMeta } from './ai/neural/neural-policy.js';
 
 // Utility-based policies are registered via player-ai-system.js imports.
 // Legacy policies (survival, progression) are also imported there.
@@ -127,18 +128,55 @@ async function main() {
   // ── Debug overlay (always available) ──
   const debugOverlay = createDebugOverlay(document.getElementById('debug-overlay'));
   const debugToggleBtn = document.getElementById('debug-toggle');
+  const cacheResetBtn = document.getElementById('cache-reset');
+
+  function setDebugOn(on) {
+    if (on) {
+      if (!debugOverlay.visible) debugOverlay.toggle();
+      debugToggleBtn?.classList.add('active');
+      cacheResetBtn?.classList.remove('hidden');
+    } else {
+      if (debugOverlay.visible) debugOverlay.toggle();
+      debugToggleBtn?.classList.remove('active');
+      cacheResetBtn?.classList.add('hidden');
+    }
+  }
+
   if (debugToggleBtn) {
     debugToggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      debugOverlay.toggle();
-      debugToggleBtn.classList.toggle('active');
+      setDebugOn(!debugOverlay.visible);
     });
   }
+
+  // Nuclear-option cache reset — works on mobile without DevTools.
+  // Unregisters SW, clears all caches, hard reloads.
+  if (cacheResetBtn) {
+    cacheResetBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      cacheResetBtn.textContent = 'RESETTING…';
+      cacheResetBtn.disabled = true;
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+      } catch (err) {
+        console.warn('[reset] failed to clear caches', err);
+      }
+      // Reload bypassing browser HTTP cache too.
+      window.location.reload();
+    });
+  }
+
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F3') {
       e.preventDefault();
-      debugOverlay.toggle();
-      if (debugToggleBtn) debugToggleBtn.classList.toggle('active');
+      setDebugOn(!debugOverlay.visible);
     }
     if (e.code === 'Escape' && appState.screen === AppState.PLAYING) {
       appState.setScreen(AppState.PAUSED);
@@ -526,6 +564,7 @@ async function main() {
 
       debugOverlay.update({
         fps: clock.fps,
+        weightsMeta: getLoadedWeightsMeta(),
         activeEntities: snapshot.activeCount,
         enemyCount: snapshot.enemyCount,
         projectileCount: snapshot.projectileCount,

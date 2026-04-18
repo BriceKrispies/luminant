@@ -26,6 +26,12 @@ export function createDebugOverlay(element) {
 
       const lines = [
         `Build: ${COMMIT}`,
+      ];
+      if (data.weightsMeta) {
+        const m = data.weightsMeta;
+        lines.push(`Weights: fit=${m.fitness?.toFixed(0)} @${m.timestamp?.slice(0, 10)}`);
+      }
+      lines.push(
         `FPS: ${data.fps || 0}`,
         `Entities: ${data.activeEntities || 0}`,
         `  Enemies: ${data.enemyCount || 0}`,
@@ -49,7 +55,7 @@ export function createDebugOverlay(element) {
         `Wave: ${(data.wave || 0) + 1}`,
         `Total kills: ${data.totalKills || 0}`,
         `Time: ${(data.time || 0).toFixed(1)}s`,
-      ];
+      );
 
       // Renderer info
       if (data.renderer) {

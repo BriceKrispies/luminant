@@ -213,4 +213,14 @@ function createNeuralPolicy(params = {}) {
 
 registerPolicy('neural', createNeuralPolicy);
 
-export { createNeuralPolicy, DEFAULT_TOPOLOGY };
+/** Returns metadata about the weights that were loaded at module init. */
+function getLoadedWeightsMeta() {
+  if (!TRAINED_WEIGHTS) return null;
+  return {
+    fitness: TRAINED_WEIGHTS.fitness,
+    timestamp: TRAINED_WEIGHTS.timestamp,
+    topology: TRAINED_WEIGHTS.topology,
+  };
+}
+
+export { createNeuralPolicy, DEFAULT_TOPOLOGY, getLoadedWeightsMeta };

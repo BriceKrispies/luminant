@@ -213,6 +213,36 @@ html, body {
   background: rgba(60, 140, 80, 0.25);
 }
 
+/* ── Cache reset button (mobile-friendly) ── */
+#cache-reset {
+  position: absolute;
+  top: 8px;
+  left: 64px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #faa;
+  background: var(--hud-bg);
+  border: 1px solid rgba(255, 120, 120, 0.3);
+  border-radius: var(--hud-radius);
+  pointer-events: all;
+  cursor: pointer;
+  z-index: 25;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+#cache-reset:hover,
+#cache-reset:active {
+  border-color: rgba(255, 120, 120, 0.6);
+  color: #fdd;
+}
+#cache-reset[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* ── Update-available banner (SW new version prompt) ── */
 #update-banner {
   position: absolute;
