@@ -24,8 +24,8 @@ import { createDecisionManager } from '../decisions/manager.js';
 import { DecisionKind, DecisionMode } from '../decisions/types.js';
 import { ARCHETYPES, DEFAULT_ARCHETYPE_ID } from '../content/archetypes.js';
 
-const WORLD_W = 4096;
-const WORLD_H = 4096;
+const WORLD_W = 540;
+const WORLD_H = 540;
 const DT = 1 / 60;
 
 /**
@@ -423,7 +423,7 @@ export async function runGameWithBehavior(options) {
     let maxStuckStreak = 0;
     let centerDistSum = 0;
     let ticksAlive = 0;
-    const WALL_THRESHOLD = 120;
+    const WALL_THRESHOLD = 20; // ~same relative proportion as old 120px in a 4096 world
     const STUCK_THRESHOLD = 0.05;
     const halfW = WORLD_W / 2;
     const halfH = WORLD_H / 2;

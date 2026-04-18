@@ -12,8 +12,8 @@ const args = parseArgs(process.argv.slice(2));
 const ENEMY_COUNT = args.enemies || 200;
 const TICKS = args.ticks || 600;
 const DT = args.dt || 1 / 60;
-const WORLD_W = 4096;
-const WORLD_H = 4096;
+const WORLD_W = 540;
+const WORLD_H = 540;
 
 async function run() {
   console.log(`[headless] Loading engine...`);
@@ -33,7 +33,7 @@ async function run() {
   let spawned = 0;
   for (let i = 0; i < ENEMY_COUNT; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 300 + Math.random() * 500;
+    const dist = 40 + Math.random() * 65;
     const x = WORLD_W / 2 + Math.cos(angle) * dist;
     const y = WORLD_H / 2 + Math.sin(angle) * dist;
     const types = [TYPE.ENEMY_BASIC, TYPE.ENEMY_FAST, TYPE.ENEMY_TANK];
