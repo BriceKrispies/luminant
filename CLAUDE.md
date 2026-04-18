@@ -212,7 +212,7 @@ Headless-first decision layer. Gameplay systems request a decision (archetype at
 
 **Presenters** are thin DOM adapters with contract `{ present(req, options, resolve), cancel() }`. `src/ui/upgrade-picker.js` and `src/ui/archetype-picker.js` are the two live-mode presenters. `main.js` wires both through a small composite presenter that dispatches by `request.kind`.
 
-**Archetype content** (`src/content/archetypes.js`) — 4 starting archetypes (balanced, warrior, ranger, mystic) that set starting weapon and stat modifiers. Applied by `skills.applyArchetype(id)` before the tick loop. Recorded as the first entry of every run's `decisionHistory`.
+**Archetype content** (`src/content/archetypes.js`) — 3 starting archetypes (warrior, ranger, mystic) that set starting weapon and stat modifiers. Applied by `skills.applyArchetype(id)` before the tick loop. Recorded as the first entry of every run's `decisionHistory`.
 
 **Integration points:**
 - `src/ai/game-runner.js` — constructs manager in `policy` mode (or `scripted` when `decisionScript` is supplied); calls `requestSync` pre-loop for archetype and inside the level-up check.
