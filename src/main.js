@@ -294,6 +294,7 @@ async function main() {
 
     for (const dt of steps) {
       // Auto-player: compute AI input and inject as override
+      let aiWorldTarget = null;
       if (autoPlayer.enabled) {
         const pp = player.getPosition();
 
@@ -332,14 +333,19 @@ async function main() {
         });
         const aiInput = autoPlayer.update(pp.x, pp.y);
         if (aiInput) {
-          // Convert AI world-space target to screen-space for the weapon system
-          const screenTarget = camera.worldToScreen(aiInput.targetX, aiInput.targetY);
+          // AI aim is already in world space — bypass the camera round-trip.
+          // worldToScreen + screenToWorld is NOT an exact inverse when the
+          // camera is shaking or has a hit-impulse, which would add random
+          // noise to the aim target during combat. Keep movement/attack in
+          // the override (input system path), but remember the world-space
+          // aim for weapon update below.
+          aiWorldTarget = { x: aiInput.targetX, y: aiInput.targetY };
           input.setOverride({
             dx: aiInput.dx,
             dy: aiInput.dy,
             attack: aiInput.attack,
-            targetX: screenTarget.x,
-            targetY: screenTarget.y,
+            targetX: 0,
+            targetY: 0,
           });
         }
       }
@@ -349,8 +355,11 @@ async function main() {
       const move = input.getMovement();
       const isMoving = Math.abs(move.dx) > 0.1 || Math.abs(move.dy) > 0.1;
 
-      // Weapon aim target in world coords
-      const worldTarget = camera.screenToWorld(input.mouseX, input.mouseY);
+      // Weapon aim target in world coords — AI supplies world coords directly;
+      // human mouse is converted via the camera.
+      const worldTarget = aiWorldTarget
+        ? aiWorldTarget
+        : camera.screenToWorld(input.mouseX, input.mouseY);
       const pp = player.getPosition();
 
       skills.updateStillTimer(dt, isMoving);
