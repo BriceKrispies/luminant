@@ -422,8 +422,11 @@ async function main() {
       feedback.update(dt);
       updateEffects(dt);
 
-      // Director + elites — use snapshot enemy count from last frame to avoid rescanning
-      director.update(dt, pp.x, pp.y, lastEnemyCount);
+      // Director + elites — use a fresh enemy count each tick to match the
+      // headless harness; the previous "use lastEnemyCount" optimization
+      // introduced a 1-frame spawn-pacing lag that diverged from training.
+      const enemyCount = engine.countByType(2, 9);
+      director.update(dt, pp.x, pp.y, enemyCount);
       elites.update(dt, pp.x, pp.y, director.gameTime);
       enemyActions.update(dt);
 

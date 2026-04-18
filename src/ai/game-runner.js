@@ -358,6 +358,8 @@ export async function runGameWithBehavior(options) {
     maxTicks = 30000,
     wasm: preloadedWasm,
     silent = true,
+    decisionScript = null,
+    onDecisionDrift = null,
   } = options;
 
   const rng = createRNG(seed);
@@ -395,10 +397,12 @@ export async function runGameWithBehavior(options) {
 
     let latestObs = null;
     const decisions = createDecisionManager({
-      mode: DecisionMode.POLICY,
+      mode: decisionScript ? DecisionMode.SCRIPTED : DecisionMode.POLICY,
       policy,
       seed,
       history: decisionHistory,
+      script: decisionScript || [],
+      onDrift: onDecisionDrift,
       onObservation: () => latestObs,
     });
 

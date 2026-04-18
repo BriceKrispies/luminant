@@ -27,8 +27,11 @@ try {
   } else {
     // Browser — resolve relative to this module's URL
     const url = new URL('./trained-weights.json', import.meta.url).href;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { cache: 'no-cache' });
     if (resp.ok) TRAINED_WEIGHTS = await resp.json();
+  }
+  if (TRAINED_WEIGHTS) {
+    console.log(`[neural] Loaded weights: fitness=${TRAINED_WEIGHTS.fitness?.toFixed(0)} timestamp=${TRAINED_WEIGHTS.timestamp} topology=${JSON.stringify(TRAINED_WEIGHTS.topology)}`);
   }
 } catch (e) {
   console.warn('[neural] Failed to load trained weights:', e?.message || e);
