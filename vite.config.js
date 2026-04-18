@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
-import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 
 function getGitCommit() {
@@ -13,6 +12,28 @@ function getGitCommit() {
   }
 }
 
+/** True if there are uncommitted tracked changes. */
+function isDirty() {
+  try {
+    execSync('git diff --quiet && git diff --cached --quiet', { cwd: __dirname });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Build version used to bust the service worker cache.
+ *
+ * Commit-hash-based: a new commit → new cache name → old cache purged on
+ * activate, forcing fresh asset fetches (including trained-weights.json).
+ * Same commit → same cache → stable offline experience.
+ *
+ * "-dirty" suffix when there are uncommitted tracked changes, so testing
+ * local edits against a live SW doesn't get stuck on a stale cache.
+ */
+const BUILD_VERSION = `${getGitCommit()}${isDirty() ? '-dirty' : ''}`;
+
 /** Vite plugin: stamp sw.js with a unique cache version on each build */
 function swVersionPlugin() {
   return {
@@ -21,11 +42,7 @@ function swVersionPlugin() {
       const swPath = resolve(__dirname, 'dist', 'sw.js');
       try {
         let sw = readFileSync(swPath, 'utf8');
-        const hash = createHash('md5')
-          .update(Date.now().toString())
-          .digest('hex')
-          .slice(0, 8);
-        sw = sw.replaceAll('__BUILD_HASH__', hash);
+        sw = sw.replaceAll('__BUILD_HASH__', BUILD_VERSION);
         writeFileSync(swPath, sw);
       } catch { /* sw.js not in output — dev mode */ }
     },
@@ -38,7 +55,7 @@ export default defineConfig({
   base: process.env.GITHUB_PAGES ? '/luminant/' : '/',
   plugins: [swVersionPlugin()],
   define: {
-    __GIT_COMMIT__: JSON.stringify(getGitCommit()),
+    __GIT_COMMIT__: JSON.stringify(BUILD_VERSION),
   },
   build: {
     outDir: 'dist',
