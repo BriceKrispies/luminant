@@ -82,38 +82,23 @@ async function main() {
   const input = createInputSystem(canvas);
 
   // ── Renderer manager (detects WebGPU, loads preference, inits renderer) ──
-  const rendererBadge = document.getElementById('renderer-badge');
+  // The on-screen toggle is gone; F4 keeps it available for dev use.
   const rendererManager = createRendererManager(canvas, {
     onSwitch(id, name) {
-      if (rendererBadge) rendererBadge.textContent = name;
       console.log(`[main] Renderer active: ${name}`);
     },
     onError(id, message) {
       console.warn(`[main] Renderer error (${id}): ${message}`);
-      // Show brief toast if user tried to switch to unsupported backend
-      if (rendererBadge) {
-        const prev = rendererBadge.textContent;
-        rendererBadge.textContent = `${id}: not supported`;
-        rendererBadge.classList.add('renderer-badge--error');
-        setTimeout(() => {
-          rendererBadge.textContent = prev;
-          rendererBadge.classList.remove('renderer-badge--error');
-        }, 2000);
-      }
     },
   });
   await rendererManager.init();
 
-  // Renderer toggle (keyboard shortcut: F4 or click badge)
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F4') {
       e.preventDefault();
       rendererManager.toggle();
     }
   });
-  if (rendererBadge) {
-    rendererBadge.addEventListener('click', () => rendererManager.toggle());
-  }
 
   // ── App state + menu ──
   const appState = createAppState();
@@ -121,10 +106,19 @@ async function main() {
 
   // ── Debug overlay (always available) ──
   const debugOverlay = createDebugOverlay(document.getElementById('debug-overlay'));
+  const debugToggleBtn = document.getElementById('debug-toggle');
+  if (debugToggleBtn) {
+    debugToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      debugOverlay.toggle();
+      debugToggleBtn.classList.toggle('active');
+    });
+  }
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F3') {
       e.preventDefault();
       debugOverlay.toggle();
+      if (debugToggleBtn) debugToggleBtn.classList.toggle('active');
     }
     if (e.code === 'Escape' && appState.screen === AppState.PLAYING) {
       appState.setScreen(AppState.PAUSED);

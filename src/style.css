@@ -183,12 +183,13 @@ html, body {
   50%      { opacity: 1; }
 }
 
-/* ── Renderer badge ── */
-#renderer-badge {
+/* ── Debug toggle button (top-left) ── */
+#debug-toggle {
   position: absolute;
-  bottom: 52px;
-  right: 12px;
+  top: 8px;
+  left: 8px;
   padding: 4px 10px;
+  font-family: inherit;
   font-size: 0.6rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -198,18 +199,18 @@ html, body {
   border-radius: var(--hud-radius);
   pointer-events: all;
   cursor: pointer;
-  z-index: 15;
+  z-index: 25;
   text-transform: uppercase;
   transition: all 0.2s;
 }
-#renderer-badge:hover {
+#debug-toggle:hover {
   border-color: rgba(100, 180, 100, 0.5);
   color: #afa;
 }
-#renderer-badge.renderer-badge--error {
-  color: #fa8;
-  border-color: rgba(255, 180, 80, 0.4);
-  background: rgba(200, 120, 40, 0.2);
+#debug-toggle.active {
+  color: #afa;
+  border-color: rgba(100, 255, 120, 0.6);
+  background: rgba(60, 140, 80, 0.25);
 }
 
 /* ── Auto upgrade log ── */
@@ -720,7 +721,7 @@ html, body {
 /* ── Debug overlay ── */
 #debug-overlay {
   position: absolute;
-  top: 8px;
+  top: 36px;
   left: 8px;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.75);
