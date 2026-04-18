@@ -50,26 +50,46 @@ async function main() {
   // ── Register service worker for PWA / offline ──
   if ('serviceWorker' in navigator) {
     const swUrl = (import.meta.env?.BASE_URL || '/') + 'sw.js';
+    const banner = document.getElementById('update-banner');
+    const bannerBtn = document.getElementById('update-banner-btn');
+    let waitingSW = null;
+
+    function showUpdateBanner(sw) {
+      waitingSW = sw;
+      if (banner) banner.classList.remove('hidden');
+    }
+
+    if (bannerBtn) {
+      bannerBtn.addEventListener('click', () => {
+        if (waitingSW) {
+          // Trigger skipWaiting in the SW; controllerchange below reloads.
+          waitingSW.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+
     navigator.serviceWorker.register(swUrl).then((reg) => {
       // Check for updates every 60s (catches deploys while tab is open)
       setInterval(() => reg.update().catch(() => {}), 60_000);
 
-      // When a new SW is waiting, activate it and reload
-      function onNewSW(sw) {
+      function trackWaiting(sw) {
         if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-          // New version ready — reload to pick it up.
-          // skipWaiting() in the SW triggers controllerchange below.
-          sw.postMessage({ type: 'SKIP_WAITING' });
+          // New version is ready and a controller exists — this is an
+          // update, not the first install. Prompt the user.
+          showUpdateBanner(sw);
         }
       }
-      if (reg.waiting) onNewSW(reg.waiting);
+
+      if (reg.waiting) trackWaiting(reg.waiting);
       reg.addEventListener('updatefound', () => {
         const next = reg.installing;
-        if (next) next.addEventListener('statechange', () => onNewSW(next));
+        if (next) next.addEventListener('statechange', () => trackWaiting(next));
       });
     }).catch(() => {});
 
-    // Reload when a new SW takes control (seamless update)
+    // Reload when a new SW takes control (fires after SKIP_WAITING).
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       window.location.reload();
     });
