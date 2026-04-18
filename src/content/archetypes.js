@@ -19,11 +19,6 @@
 
 export const ARCHETYPES = [
   {
-    id: 'balanced',
-    name: 'Balanced',
-    desc: 'No modifiers — a neutral starting point.',
-  },
-  {
     id: 'warrior',
     name: 'Warrior',
     desc: '+30 max HP, +2 armor. Tanky melee opener.',
@@ -46,7 +41,7 @@ export const ARCHETYPES = [
   },
 ];
 
-export const DEFAULT_ARCHETYPE_ID = 'balanced';
+export const DEFAULT_ARCHETYPE_ID = 'warrior';
 
 export function getArchetype(id) {
   return ARCHETYPES.find(a => a.id === id) || null;

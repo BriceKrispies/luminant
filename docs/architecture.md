@@ -122,7 +122,7 @@ Request ids are `${kind}:${seed}:${tick}:${counter}` — deterministic per seed 
 
 Live-mode presenters (`src/ui/upgrade-picker.js`, `src/ui/archetype-picker.js`) implement `{ present(req, options, resolve), cancel() }`. `main.js` wires both through a small composite presenter that dispatches by `request.kind`.
 
-**First new decision kind — player archetype.** `src/content/archetypes.js` defines run-start archetypes (balanced, warrior, ranger, mystic). `skills.applyArchetype(id)` applies starting weapon + stat modifiers and is called before the tick loop in both `game-runner.js` and `main.js`. `AppState.ARCHETYPE_SELECT` gates the main loop via `decisions.blocking` while the player picks.
+**First new decision kind — player archetype.** `src/content/archetypes.js` defines run-start archetypes (warrior, ranger, mystic). `skills.applyArchetype(id)` applies starting weapon + stat modifiers and is called before the tick loop in both `game-runner.js` and `main.js`. `AppState.ARCHETYPE_SELECT` gates the main loop via `decisions.blocking` while the player picks.
 
 ### Renderer (`src/renderer/`)
 - `renderer-interface.js` — backend contract (id, name, init, resize, render, dispose)
