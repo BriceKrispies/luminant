@@ -251,7 +251,7 @@ async function main() {
     clock.start();
 
     autoPlayer.enabled = true;
-    autoPlayer.setPolicy('exterminator');
+    autoPlayer.setPolicy('neural');
     autoPlayer.reset();
     input.setOverride(null);
     decisions.cancelAll();
