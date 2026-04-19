@@ -11,6 +11,7 @@
 
 import { POSE_STRIDE, PX, PY } from './skeleton.js';
 import { drawProgressionEffects } from './progression-visuals.js';
+import { getArchetypeSprite } from './sprite-atlas.js';
 
 // ── Color helpers ──
 
@@ -267,6 +268,30 @@ function pxLine(ctx, x0, y0, x1, y1, color, thickness) {
   }
 }
 
+// ── Dynamic overlays (paired with cached sprites from sprite-atlas) ──
+
+function drawPixelWispTrails(ctx, cx, cy, pal, time) {
+  for (let i = 0; i < 3; i++) {
+    const tx = cx - 2 + i * 2;
+    const trailLen = 4 + Math.sin(time * 1.5 + i * 0.8) * 1.5;
+    for (let dy = 0; dy < trailLen; dy++) {
+      const fade = 1 - dy / trailLen;
+      const wx = tx + Math.sin(time * 1.8 + dy * 0.5 + i) * (0.5 + dy * 0.1);
+      px(ctx, wx, cy + 3 + dy, pal.base, fade * 0.7);
+    }
+  }
+}
+
+function drawPixelFlameSparks(ctx, cx, cy, pal, time) {
+  const baseY = cy + 4;
+  const flameH = 12;
+  for (let i = 0; i < 2; i++) {
+    const sx = cx + Math.sin(time * 6 + i * 2.1) * 2;
+    const sy = baseY - flameH + Math.sin(time * 5 + i * 1.7) * 1;
+    px(ctx, sx, sy, pal.highlight, 0.6);
+  }
+}
+
 function drawPixelHero(ctx, cx, cy, pal, deform, time) {
   // Shadow
   pxEllipse(ctx, cx, cy + 7, 4, 2, [0, 0, 0], 0.3);
@@ -406,14 +431,26 @@ export function drawCreaturePixel(ctx, model) {
     drawProgressionEffects(ctx, cx, cy, progression, pal, model.radius, time, null, glowOnly);
   }
 
-  // Draw body
-  switch (archetypeId) {
-    case 'slime':  drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
-    case 'ghost':  drawPixelWisp(ctx, cx, cy, pal, deform, time); break;
-    case 'ember':  drawPixelFlame(ctx, cx, cy, pal, deform, time); break;
-    case 'brute':  model.useSkeleton ? drawPixelHomunculus(ctx, model) : drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
-    case 'player': drawPixelHero(ctx, cx, cy, pal, deform, time); break;
-    default:       drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
+  // Draw body — try cached sprite first, fall back to direct draw.
+  const sprite = getArchetypeSprite(archetypeId);
+  if (sprite) {
+    ctx.drawImage(
+      sprite.canvas,
+      Math.round(cx) - sprite.halfW,
+      Math.round(cy) - sprite.halfH
+    );
+    // Time-varying overlays that the cached sprite intentionally omits.
+    if (archetypeId === 'ghost') drawPixelWispTrails(ctx, cx, cy, pal, time);
+    else if (archetypeId === 'ember') drawPixelFlameSparks(ctx, cx, cy, pal, time);
+  } else {
+    switch (archetypeId) {
+      case 'slime':  drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
+      case 'ghost':  drawPixelWisp(ctx, cx, cy, pal, deform, time); break;
+      case 'ember':  drawPixelFlame(ctx, cx, cy, pal, deform, time); break;
+      case 'brute':  model.useSkeleton ? drawPixelHomunculus(ctx, model) : drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
+      case 'player': drawPixelHero(ctx, cx, cy, pal, deform, time); break;
+      default:       drawPixelBlob(ctx, cx, cy, pal, deform, time); break;
+    }
   }
 
   // Eyes
