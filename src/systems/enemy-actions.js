@@ -22,6 +22,8 @@ export function createEnemyActionsSystem(engine, spawner, player) {
       if (pid < 0) return;
       const px = engine.getEntityX(pid);
       const py = engine.getEntityY(pid);
+      const pvx = engine.getEntityVX(pid);
+      const pvy = engine.getEntityVY(pid);
 
       // --- Poll enemy action flags (SHOOT / SUMMON) ---
       const buf = engine.mem;
@@ -37,7 +39,7 @@ export function createEnemyActionsSystem(engine, spawner, player) {
         const ey = engine.getEntityY(id);
 
         if (flags & ACTION_FLAG.SHOOT) {
-          fireProjectile(ex, ey, px, py, type);
+          fireProjectile(ex, ey, px, py, pvx, pvy, type);
         }
         if (flags & ACTION_FLAG.SUMMON) {
           summonMinions(ex, ey, type);
@@ -69,14 +71,12 @@ export function createEnemyActionsSystem(engine, spawner, player) {
     },
   };
 
-  function fireProjectile(ex, ey, px, py, shooterType) {
+  function fireProjectile(ex, ey, px, py, pvx, pvy, shooterType) {
     const key = keyForType(shooterType);
     const def = ENEMY_DEFS[key] || ENEMY_DEFS.ranged;
-    const dx = px - ex;
-    const dy = py - ey;
-    const len = Math.hypot(dx, dy) || 1;
     const speed = def.projectileSpeed || ENEMY_BULLET_SPEED;
     const dmg = def.projectileDamage || 8;
+    const aim = computeLeadAim(ex, ey, px, py, pvx, pvy, speed);
     const id = engine.spawnEntity(
       TYPE.PROJECTILE_ENEMY,
       ex, ey,
@@ -88,7 +88,7 @@ export function createEnemyActionsSystem(engine, spawner, player) {
     );
     if (id < 0) return;
     // WAT's update_projectiles moves by stored velocity (vx, vy) — set it directly.
-    engine.setEntityVelocity(id, (dx / len) * speed, (dy / len) * speed);
+    engine.setEntityVelocity(id, aim.x * speed, aim.y * speed);
     engine.setEntityLifetime(id, ENEMY_BULLET_LIFETIME);
   }
 
@@ -113,4 +113,40 @@ function keyForType(type) {
     for (const [k, d] of Object.entries(ENEMY_DEFS)) typeToKey[d.type] = k;
   }
   return typeToKey[type];
+}
+
+/**
+ * First-order lead prediction: return unit aim vector from (ex,ey) toward the
+ * point where a bullet of `speed` will intercept a target currently at (px,py)
+ * moving at (pvx,pvy). Falls back to direct aim when no real intercept exists
+ * (target as fast as or faster than the bullet, or degenerate geometry).
+ *
+ * Derivation: solve |(P-E) + V·t| = s·t for smallest positive t →
+ *   (V·V - s²)·t² + 2·(D·V)·t + D·D = 0, where D = P - E.
+ */
+export function computeLeadAim(ex, ey, px, py, pvx, pvy, speed) {
+  const dx = px - ex;
+  const dy = py - ey;
+  const a = pvx * pvx + pvy * pvy - speed * speed;
+  const b = 2 * (dx * pvx + dy * pvy);
+  const c = dx * dx + dy * dy;
+  let ax = dx;
+  let ay = dy;
+  if (a < -1e-6) {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const sq = Math.sqrt(disc);
+      const t1 = (-b + sq) / (2 * a);
+      const t2 = (-b - sq) / (2 * a);
+      let t = Infinity;
+      if (t1 > 0 && t1 < t) t = t1;
+      if (t2 > 0 && t2 < t) t = t2;
+      if (Number.isFinite(t)) {
+        ax = dx + pvx * t;
+        ay = dy + pvy * t;
+      }
+    }
+  }
+  const len = Math.hypot(ax, ay) || 1;
+  return { x: ax / len, y: ay / len };
 }
